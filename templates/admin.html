@@ -4,7 +4,7 @@
 <section class="section-header">
   <div>
     <h1>Admin</h1>
-    <p>Manage credits, redeem codes, and API clients.</p>
+    <p>Manage users, credits, redeem codes, and SIP settings.</p>
   </div>
   <div class="stat-row">
     <span><b>{{ stats.users }}</b> users</span>
@@ -33,22 +33,14 @@
     </form>
   </section>
   <section class="panel">
-    <h2>API clients</h2>
+    <h2>SIP settings</h2>
     <form method="post" class="form compact">
-      <input type="hidden" name="action" value="api_key">
-      <label>Client name <input name="client_name" required></label>
-      <button>Generate key</button>
-    </form>
-    <form method="post" class="form compact">
-      <input type="hidden" name="action" value="api_credits">
-      <label>Client name <input name="client_name" required></label>
-      <label>Credits <input name="credits" type="number" min="1" required></label>
-      <button>Add credits</button>
-    </form>
-    <form method="post" class="form compact">
-      <input type="hidden" name="action" value="api_revoke">
-      <label>Client name <input name="client_name" required></label>
-      <button class="danger">Revoke</button>
+      <input type="hidden" name="action" value="sip_settings">
+      <label>SIP domain <input name="SIP_DOMAIN" value="{{ settings.SIP_DOMAIN }}" placeholder="sip.example.com" required></label>
+      <label>SIP port <input name="SIP_PORT" value="{{ settings.SIP_PORT or '5060' }}" inputmode="numeric" required></label>
+      <label>SIP user <input name="SIP_USER" value="{{ settings.SIP_USER }}" autocomplete="off" required></label>
+      <label>SIP password <input name="SIP_PASSWORD" type="password" autocomplete="new-password" placeholder="{{ 'Saved - leave blank to keep' if settings.SIP_PASSWORD_SET else 'Enter password' }}"></label>
+      <button>Save settings</button>
     </form>
   </section>
 </div>
@@ -67,26 +59,4 @@
   </div>
 </section>
 
-<section class="panel wide">
-  <h2>API client stats</h2>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Name</th><th>Status</th><th>Credits</th><th>Calls</th><th>Used</th><th>Created</th></tr></thead>
-      <tbody>
-        {% for client in clients %}
-          <tr>
-            <td>{{ client.name }}</td>
-            <td>{{ "active" if client.active else "revoked" }}</td>
-            <td>{{ "unlimited" if client.unlimited_access else client.credits }}</td>
-            <td>{{ client.calls }}</td>
-            <td>{{ client.used_credits }}</td>
-            <td>{{ client.created_at }}</td>
-          </tr>
-        {% else %}
-          <tr><td colspan="6">No API clients yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
 {% endblock %}

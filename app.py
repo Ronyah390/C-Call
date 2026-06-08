@@ -1,6 +1,3 @@
-import base64
-import binascii
-import json
 import math
 import os
 import secrets
@@ -12,7 +9,6 @@ import time
 import uuid
 from functools import wraps
 from pathlib import Path
-from urllib import parse, request, error
 
 from dotenv import load_dotenv
 from flask import (
@@ -20,7 +16,6 @@ from flask import (
     Response,
     flash,
     g,
-    jsonify,
     redirect,
     render_template,
     request as flask_request,
@@ -43,16 +38,10 @@ DB_PATH = Path(os.environ.get("CALLBOT_DB", INSTANCE_DIR / "callbot.db"))
 
 CALL_MAX_DURATION_SECONDS = max(1, int(os.environ.get("CALL_MAX_DURATION_SECONDS", "60")))
 ASTERISK_DIAL_FORMAT = os.environ.get("ASTERISK_DIAL_FORMAT", "e164_noplus")
-AMARIP_BASE_URL = os.environ.get("AMARIP_BASE_URL", "https://amarip.net").rstrip("/")
-AMARIP_USERNAME = os.environ.get("AMARIP_USERNAME", "")
-AMARIP_PASSWORD = os.environ.get("AMARIP_PASSWORD", "")
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
 app.config["MAX_CONTENT_LENGTH"] = 12 * 1024 * 1024
-
-_amarip_token = ""
-_amarip_token_expiry = 0.0
 
 
 def ensure_dirs() -> None:
@@ -107,22 +96,10 @@ def init_db() -> None:
                 duration_seconds INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
-            CREATE TABLE IF NOT EXISTS api_clients (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                api_key TEXT NOT NULL UNIQUE,
-                credits INTEGER NOT NULL DEFAULT 0,
-                unlimited_access INTEGER NOT NULL DEFAULT 0,
-                active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS api_calls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                client_id INTEGER NOT NULL,
-                number TEXT NOT NULL,
-                credits_charged INTEGER NOT NULL,
-                duration_seconds INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             """
         )
@@ -134,6 +111,38 @@ def init_db() -> None:
                 "INSERT INTO users (email, password_hash, name, credits, is_admin) VALUES (?, ?, ?, 0, 1)",
                 (admin_email, generate_password_hash(admin_password), "Admin"),
             )
+
+
+def get_setting(key: str, default: str = "") -> str:
+    row = get_db().execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    if row is None:
+        return os.environ.get(key, default)
+    return row["value"]
+
+
+def set_setting(key: str, value: str) -> None:
+    get_db().execute(
+        """
+        INSERT INTO app_settings (key, value, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+        """,
+        (key, value),
+    )
+
+
+def sip_config() -> dict[str, str]:
+    return {
+        "SIP_DOMAIN": get_setting("SIP_DOMAIN"),
+        "SIP_PORT": get_setting("SIP_PORT", "5060"),
+        "SIP_USER": get_setting("SIP_USER"),
+        "SIP_PASSWORD": get_setting("SIP_PASSWORD"),
+    }
+
+
+def sip_config_ready() -> bool:
+    config = sip_config()
+    return all(config.get(name) for name in ("SIP_DOMAIN", "SIP_USER", "SIP_PASSWORD"))
 
 
 def current_user():
@@ -283,22 +292,6 @@ def create_uploaded_audio(file_storage) -> str:
     return convert_to_call_audio(source_path, audio_id)
 
 
-def create_base64_audio(audio_base64: str) -> str:
-    if not audio_base64:
-        raise ValueError("audio_base64 is required.")
-    try:
-        data = base64.b64decode(audio_base64, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ValueError("audio_base64 must be valid base64.") from exc
-    if len(data) > 10 * 1024 * 1024:
-        raise ValueError("Audio upload is too large. Maximum is 10 MB.")
-    ensure_dirs()
-    audio_id = uuid.uuid4().hex[:12]
-    source_path = UPLOAD_DIR / f"api-{audio_id}.audio"
-    source_path.write_bytes(data)
-    return convert_to_call_audio(source_path, audio_id)
-
-
 def estimate_call_duration_seconds(audio_name: str, repeat_count: int = 1) -> int:
     ulaw_path = SOUNDS_DIR / f"{audio_name}.ulaw"
     audio_seconds = max(1, math.ceil(ulaw_path.stat().st_size / 8000))
@@ -307,8 +300,9 @@ def estimate_call_duration_seconds(audio_name: str, repeat_count: int = 1) -> in
 
 
 def make_call(number: str, audio_name: str, repeat_count: int, max_seconds: int) -> None:
+    config = sip_config()
     required = ["SIP_DOMAIN", "SIP_USER", "SIP_PASSWORD"]
-    missing = [name for name in required if not os.environ.get(name)]
+    missing = [name for name in required if not config.get(name)]
     if missing:
         raise RuntimeError(f"Missing SIP config: {', '.join(missing)}")
     audio_path = SOUNDS_DIR / f"{audio_name}.ulaw"
@@ -316,6 +310,8 @@ def make_call(number: str, audio_name: str, repeat_count: int, max_seconds: int)
         raise RuntimeError("Converted call audio is missing.")
     dial_number = format_dial_number(number)
     log_path = INSTANCE_DIR / "direct-sip.log"
+    env = os.environ.copy()
+    env.update(config)
     with log_path.open("ab", buffering=0) as direct_log:
         result = subprocess.run(
             [
@@ -326,6 +322,7 @@ def make_call(number: str, audio_name: str, repeat_count: int, max_seconds: int)
                 str(2 if int(repeat_count) > 1 else 1),
                 str(max(1, int(max_seconds))),
             ],
+            env=env,
             stdout=direct_log,
             stderr=direct_log,
             timeout=max_seconds + int(os.environ.get("SIP_PROCESS_TIMEOUT_SECONDS", "90")) + 30,
@@ -415,121 +412,6 @@ def normalize_client_name(name: str) -> str:
     return clean
 
 
-def generate_api_key(client_name: str) -> str:
-    name = normalize_client_name(client_name)
-    api_key = "acl_" + secrets.token_urlsafe(32)
-    db = get_db()
-    existing = db.execute("SELECT id FROM api_clients WHERE lower(name) = lower(?)", (name,)).fetchone()
-    if existing:
-        db.execute("UPDATE api_clients SET api_key = ?, active = 1 WHERE id = ?", (api_key, existing["id"]))
-    else:
-        db.execute("INSERT INTO api_clients (name, api_key, credits) VALUES (?, ?, 0)", (name, api_key))
-    db.commit()
-    return api_key
-
-
-def get_api_client(api_key: str):
-    if not api_key:
-        return None
-    return get_db().execute(
-        "SELECT * FROM api_clients WHERE api_key = ? AND active = 1",
-        (api_key.strip(),),
-    ).fetchone()
-
-
-def require_api_credits(client, needed: int) -> None:
-    if client["unlimited_access"]:
-        return
-    if client["credits"] < needed:
-        raise ValueError(f"Not enough API credits. Needed {needed}, available {client['credits']}.")
-
-
-def deduct_api_credits(client, amount: int) -> None:
-    if amount <= 0 or client["unlimited_access"]:
-        return
-    get_db().execute("UPDATE api_clients SET credits = credits - ? WHERE id = ?", (amount, client["id"]))
-
-
-def log_api_call(client_id: int, number: str, credits: int, seconds: int) -> None:
-    get_db().execute(
-        "INSERT INTO api_calls (client_id, number, credits_charged, duration_seconds) VALUES (?, ?, ?, ?)",
-        (client_id, number, credits, seconds),
-    )
-
-
-def api_key_from_request() -> str:
-    header_key = flask_request.headers.get("X-API-Key", "")
-    if header_key:
-        return header_key
-    auth = flask_request.headers.get("Authorization", "")
-    return auth[7:] if auth.lower().startswith("bearer ") else ""
-
-
-def run_api_call(client, number: str, audio_name: str, repeat_count: int = 1) -> dict:
-    normalized = normalize_phone_number(number)
-    seconds = estimate_call_duration_seconds(audio_name, repeat_count)
-    credits = credits_for_duration(seconds)
-    require_api_credits(client, credits)
-    max_seconds = credits * CALL_MAX_DURATION_SECONDS
-    make_call(normalized, audio_name, repeat_count, max_seconds)
-    charge = 0 if client["unlimited_access"] else credits
-    deduct_api_credits(client, charge)
-    log_api_call(client["id"], normalized, charge, max_seconds)
-    get_db().commit()
-    return {
-        "ok": True,
-        "number": mask_number(normalized),
-        "duration_seconds": seconds,
-        "credits_charged": charge,
-        "remaining_credits": "unlimited" if client["unlimited_access"] else client["credits"] - charge,
-    }
-
-
-def amarip_request(path: str, method: str = "GET", payload: dict | None = None, token: str | None = None) -> dict:
-    body = json.dumps(payload).encode("utf-8") if payload is not None else None
-    headers = {"Accept": "application/json"}
-    if body:
-        headers["Content-Type"] = "application/json"
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    req = request.Request(f"{AMARIP_BASE_URL}{path}", data=body, headers=headers, method=method)
-    try:
-        with request.urlopen(req, timeout=20) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"CDR provider failed: HTTP {exc.code} {detail[:160]}") from exc
-
-
-def amarip_token() -> str:
-    global _amarip_token, _amarip_token_expiry
-    if _amarip_token and time.time() < _amarip_token_expiry:
-        return _amarip_token
-    if not AMARIP_USERNAME or not AMARIP_PASSWORD:
-        raise RuntimeError("CDR provider credentials are not configured.")
-    data = amarip_request("/api/login", "POST", {"username": AMARIP_USERNAME, "password": AMARIP_PASSWORD})
-    token = data.get("token") or data.get("access_token")
-    if not token:
-        raise RuntimeError("CDR provider did not return a token.")
-    _amarip_token = token
-    _amarip_token_expiry = time.time() + 50 * 60
-    return token
-
-
-def cdr_public_row(row: dict) -> dict:
-    return {
-        "date": row.get("start_time") or row.get("created_at"),
-        "caller": row.get("caller_number"),
-        "callee": row.get("callee_number"),
-        "status": row.get("status"),
-        "duration_seconds": row.get("duration"),
-        "billable_seconds": row.get("billable_duration"),
-        "cost": row.get("call_cost"),
-        "hangup_cause": row.get("hangup_cause"),
-        "sip_status_code": row.get("sip_status_code"),
-    }
-
-
 @app.route("/")
 def index():
     return redirect(url_for("dashboard" if g.user else "login"))
@@ -589,7 +471,7 @@ def dashboard():
         "SELECT COUNT(*) AS calls, COALESCE(SUM(credits_charged), 0) AS credits FROM calls WHERE user_id = ?",
         (g.user["id"],),
     ).fetchone()
-    sip_ready = all(os.environ.get(name) for name in ("SIP_DOMAIN", "SIP_USER", "SIP_PASSWORD"))
+    sip_ready = sip_config_ready()
     return render_template("dashboard.html", calls=calls, total=total, sip_ready=sip_ready)
 
 
@@ -641,23 +523,14 @@ def admin():
                 db.execute("UPDATE users SET credits = credits + ? WHERE email = ?", (credits, email))
                 db.commit()
                 flash("User credits updated.", "success")
-            elif action == "api_key":
-                key = generate_api_key(flask_request.form.get("client_name", ""))
-                flash(f"API key: {key}", "success")
-            elif action == "api_credits":
-                client_name = normalize_client_name(flask_request.form.get("client_name", ""))
-                credits = int(flask_request.form.get("credits", "0"))
-                db.execute("UPDATE api_clients SET credits = credits + ? WHERE lower(name) = lower(?)", (credits, client_name))
+            elif action == "sip_settings":
+                for key in ("SIP_DOMAIN", "SIP_PORT", "SIP_USER"):
+                    set_setting(key, flask_request.form.get(key, "").strip())
+                password = flask_request.form.get("SIP_PASSWORD", "")
+                if password:
+                    set_setting("SIP_PASSWORD", password)
                 db.commit()
-                flash("API credits updated.", "success")
-            elif action == "api_revoke":
-                client_name = normalize_client_name(flask_request.form.get("client_name", ""))
-                db.execute(
-                    "UPDATE api_clients SET active = 0, api_key = ? WHERE lower(name) = lower(?)",
-                    ("revoked_" + secrets.token_urlsafe(16), client_name),
-                )
-                db.commit()
-                flash("API client revoked.", "success")
+                flash("SIP settings saved.", "success")
         except Exception as exc:
             db.rollback()
             flash(str(exc), "error")
@@ -670,85 +543,9 @@ def admin():
         "used": db.execute("SELECT COALESCE(SUM(credits_charged), 0) AS c FROM calls").fetchone()["c"],
     }
     users = db.execute("SELECT id, email, name, credits, is_admin, created_at FROM users ORDER BY created_at DESC LIMIT 20").fetchall()
-    clients = db.execute(
-        """
-        SELECT c.*, COUNT(a.id) AS calls, COALESCE(SUM(a.credits_charged), 0) AS used_credits
-        FROM api_clients c
-        LEFT JOIN api_calls a ON a.client_id = c.id
-        GROUP BY c.id
-        ORDER BY c.created_at DESC
-        """
-    ).fetchall()
-    return render_template("admin.html", stats=stats, users=users, clients=clients)
-
-
-@app.route("/api/balance")
-def api_balance():
-    client = get_api_client(api_key_from_request())
-    if not client:
-        return jsonify({"ok": False, "error": "Invalid API key"}), 401
-    row = get_db().execute(
-        "SELECT COUNT(*) AS calls, COALESCE(SUM(credits_charged), 0) AS used FROM api_calls WHERE client_id = ?",
-        (client["id"],),
-    ).fetchone()
-    return jsonify(
-        {
-            "ok": True,
-            "client": client["name"],
-            "credits": "unlimited" if client["unlimited_access"] else client["credits"],
-            "total_calls": row["calls"],
-            "used_credits": row["used"],
-        }
-    )
-
-
-@app.route("/api/call", methods=["POST"])
-def api_call():
-    client = get_api_client(api_key_from_request())
-    if not client:
-        return jsonify({"ok": False, "error": "Invalid API key"}), 401
-    data = flask_request.get_json(silent=True) or {}
-    try:
-        if data.get("text"):
-            audio_name = create_gtts_audio(data["text"], uuid.uuid4().hex[:12], data.get("lang", "bn"))
-        else:
-            audio_name = create_base64_audio(data.get("audio_base64", ""))
-        result = run_api_call(client, data.get("number", ""), audio_name, int(data.get("repeat_count", 1)))
-        return jsonify(result)
-    except Exception as exc:
-        get_db().rollback()
-        return jsonify({"ok": False, "error": str(exc)}), 400
-
-
-@app.route("/api/cdr")
-def api_cdr():
-    client = get_api_client(api_key_from_request())
-    if not client:
-        return jsonify({"ok": False, "error": "Invalid API key"}), 401
-    requested_key = number_match_key(flask_request.args.get("number", ""))
-    allowed = {
-        number_match_key(row["number"])
-        for row in get_db().execute("SELECT DISTINCT number FROM api_calls WHERE client_id = ?", (client["id"],)).fetchall()
-    }
-    if requested_key and requested_key not in allowed:
-        return jsonify({"ok": True, "records": []})
-    try:
-        limit = min(max(1, int(flask_request.args.get("limit", "25"))), 100)
-        rows = []
-        page = 1
-        while len(rows) < limit and page <= 5:
-            data = amarip_request(f"/api/cdr?{parse.urlencode({'page': page, 'per_page': 100})}", token=amarip_token())
-            records = data.get("data", data if isinstance(data, list) else [])
-            for record in records:
-                key = number_match_key(record.get("callee_number", ""))
-                if key in allowed and (not requested_key or key == requested_key):
-                    rows.append(cdr_public_row(record))
-                    if len(rows) >= limit:
-                        break
-            page += 1
-        return jsonify({"ok": True, "records": rows})
-    except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+    settings = sip_config()
+    settings["SIP_PASSWORD_SET"] = bool(settings.pop("SIP_PASSWORD", ""))
+    return render_template("admin.html", stats=stats, users=users, settings=settings)
 
 
 @app.route("/health")
