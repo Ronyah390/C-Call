@@ -306,6 +306,38 @@ button:hover,
   gap: 16px;
 }
 
+.composer-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 6px;
+  background: #edf4f6;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.tab-button {
+  min-height: 40px;
+  color: #405067;
+  background: transparent;
+  border-radius: 8px;
+}
+
+.tab-button:hover,
+.tab-button.active {
+  color: #fff;
+  background: var(--primary);
+}
+
+.call-tab {
+  display: none;
+}
+
+.call-tab.active {
+  display: grid;
+}
+
 .split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -397,15 +429,15 @@ th {
   text-transform: uppercase;
 }
 
-.upload-field {
+.call-tab .upload-field {
   display: none;
 }
 
-body[data-audio-mode="upload"] .upload-field {
+.call-tab[data-audio-mode="upload"] .upload-field {
   display: grid;
 }
 
-body[data-audio-mode="upload"] .tts-field {
+.call-tab[data-audio-mode="upload"] .tts-field {
   display: none;
 }
 

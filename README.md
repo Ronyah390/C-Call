@@ -6,6 +6,7 @@ Open-source self-hosted web dashboard for sending SIP voice calls with text-to-s
 
 - No registration or login
 - Browser dashboard for sending SIP voice calls
+- Single-call and bulk-call modes
 - Settings page for SIP credentials
 - Text-to-speech call audio with gTTS
 - Custom audio upload support
@@ -39,6 +40,24 @@ Open `Settings` in the webpage and save:
 - SIP password
 
 The settings are stored in the local app database under `instance/`, which is ignored by git. A person cloning the project can configure the app from the browser without editing source code.
+
+## Bulk Calls
+
+Open the dashboard, switch to `Bulk call`, and paste numbers one per line, separate them by commas, or upload a `.csv` file:
+
+```text
+017XXXXXXXX
+018XXXXXXXX
++88019XXXXXXXX
+```
+
+The same text-to-speech message or uploaded audio is used for every number in that batch.
+
+Numbers are normalized automatically. These formats are accepted:
+
+- `017XXXXXXXX`
+- `88017XXXXXXXX`
+- `+88017XXXXXXXX`
 
 ## Requirements
 

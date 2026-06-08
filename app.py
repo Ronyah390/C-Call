@@ -1,10 +1,13 @@
+import csv
 import math
 import os
+import re
 import secrets
 import sqlite3
 import subprocess
 import sys
 import uuid
+from io import StringIO
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -249,6 +252,42 @@ def log_call(number: str, mode: str, seconds: int) -> None:
     )
 
 
+def parse_bulk_numbers(raw_numbers: str) -> list[str]:
+    candidates = [item.strip() for item in re.split(r"[\n,;]+", raw_numbers or "") if item.strip()]
+    csv_file = request.files.get("numbers_csv")
+    if csv_file and csv_file.filename:
+        raw_csv = csv_file.read().decode("utf-8-sig", errors="ignore")
+        for row in csv.reader(StringIO(raw_csv)):
+            candidates.extend(cell.strip() for cell in row if cell.strip())
+    normalized_numbers = []
+    seen = set()
+    for candidate in candidates:
+        digits = "".join(ch for ch in candidate if ch.isdigit())
+        if len(digits) < 10:
+            continue
+        number = normalize_phone_number(candidate)
+        if number not in seen:
+            normalized_numbers.append(number)
+            seen.add(number)
+    if not normalized_numbers:
+        raise ValueError("At least one phone number is required.")
+    return normalized_numbers
+
+
+def create_call_audio_from_request() -> tuple[str, str]:
+    mode = request.form.get("audio_mode", "tts")
+    if mode == "upload":
+        return create_uploaded_audio(request.files.get("audio_file")), "custom"
+    return create_gtts_audio(request.form.get("message", ""), uuid.uuid4().hex[:12]), "tts"
+
+
+def place_one_call(number: str, audio_name: str, audio_mode: str, repeat: int) -> int:
+    seconds = estimate_call_duration_seconds(audio_name, repeat)
+    make_call(number, audio_name, repeat, max(1, seconds))
+    log_call(number, audio_mode, seconds)
+    return seconds
+
+
 def call_stats() -> dict[str, int]:
     row = get_db().execute(
         "SELECT COUNT(*) AS total_calls, COALESCE(SUM(duration_seconds), 0) AS total_seconds FROM calls"
@@ -275,19 +314,36 @@ def send_call():
     try:
         repeat = 2 if request.form.get("repeat_count") == "2" else 1
         number = normalize_phone_number(request.form.get("number", ""))
-        mode = request.form.get("audio_mode", "tts")
-        if mode == "upload":
-            audio_name = create_uploaded_audio(request.files.get("audio_file"))
-            audio_mode = "custom"
-        else:
-            audio_name = create_gtts_audio(request.form.get("message", ""), uuid.uuid4().hex[:12])
-            audio_mode = "tts"
-        seconds = estimate_call_duration_seconds(audio_name, repeat)
-        max_seconds = max(1, seconds)
-        make_call(number, audio_name, repeat, max_seconds)
-        log_call(number, audio_mode, seconds)
+        audio_name, audio_mode = create_call_audio_from_request()
+        place_one_call(number, audio_name, audio_mode, repeat)
         get_db().commit()
         flash(f"Call sent to {mask_number(number)}.", "success")
+    except Exception as exc:
+        get_db().rollback()
+        flash(str(exc), "error")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/bulk-call", methods=["POST"])
+def send_bulk_call():
+    try:
+        repeat = 2 if request.form.get("repeat_count") == "2" else 1
+        numbers = parse_bulk_numbers(request.form.get("numbers", ""))
+        audio_name, audio_mode = create_call_audio_from_request()
+        successes = 0
+        failures = []
+        for number in numbers:
+            try:
+                place_one_call(number, audio_name, audio_mode, repeat)
+                successes += 1
+                get_db().commit()
+            except Exception as exc:
+                get_db().rollback()
+                failures.append(f"{mask_number(number)}: {exc}")
+        if successes:
+            flash(f"Bulk call finished: {successes} sent, {len(failures)} failed.", "success")
+        if failures:
+            flash("Failed calls: " + " | ".join(failures[:5]), "error")
     except Exception as exc:
         get_db().rollback()
         flash(str(exc), "error")

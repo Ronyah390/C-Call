@@ -8,7 +8,7 @@
     <p class="hero-text">Create a text-to-speech message or upload call audio, choose the destination, and place the call from one clean browser dashboard.</p>
     <div class="hero-actions">
       <a class="button ghost" href="{{ url_for('settings') }}">Configure SIP</a>
-      <a class="button dark" href="#send-call">Send a call</a>
+      <a class="button dark" href="#send-call">Start calling</a>
     </div>
   </div>
   <aside class="hero-card">
@@ -37,15 +37,20 @@
     <div class="panel-heading">
       <div>
         <p class="eyebrow">Call composer</p>
-        <h2>Send call</h2>
+        <h2>Send calls</h2>
       </div>
       <span class="pill">gTTS + custom audio</span>
     </div>
-    <form action="{{ url_for('send_call') }}" method="post" enctype="multipart/form-data" class="form call-form">
+    <div class="composer-tabs" role="tablist" aria-label="Call mode">
+      <button class="tab-button active" type="button" data-call-tab="single">Single call</button>
+      <button class="tab-button" type="button" data-call-tab="bulk">Bulk call</button>
+    </div>
+
+    <form action="{{ url_for('send_call') }}" method="post" enctype="multipart/form-data" class="form call-form call-tab active" data-call-panel="single">
       <label>Phone number <input name="number" placeholder="017XXXXXXXX" required></label>
       <div class="split">
         <label>Audio source
-          <select name="audio_mode" id="audioMode">
+          <select name="audio_mode" class="audio-mode">
             <option value="tts">Text to speech</option>
             <option value="upload">Upload audio</option>
           </select>
@@ -60,6 +65,28 @@
       <label class="tts-field">Message <textarea name="message" rows="6" placeholder="Write the message that should play during the call"></textarea></label>
       <label class="upload-field">Audio file <input name="audio_file" type="file" accept="audio/*"></label>
       <button type="submit">Send voice call</button>
+    </form>
+
+    <form action="{{ url_for('send_bulk_call') }}" method="post" enctype="multipart/form-data" class="form call-form call-tab" data-call-panel="bulk">
+      <label>Phone numbers <textarea name="numbers" rows="7" placeholder="017XXXXXXXX&#10;018XXXXXXXX&#10;+88019XXXXXXXX"></textarea></label>
+      <label>CSV number file <input name="numbers_csv" type="file" accept=".csv,text/csv"></label>
+      <div class="split">
+        <label>Audio source
+          <select name="audio_mode" class="audio-mode">
+            <option value="tts">Text to speech</option>
+            <option value="upload">Upload audio</option>
+          </select>
+        </label>
+        <label>Repeat
+          <select name="repeat_count">
+            <option value="1">1 time</option>
+            <option value="2">2 times</option>
+          </select>
+        </label>
+      </div>
+      <label class="tts-field">Message <textarea name="message" rows="6" placeholder="This message will play for every number in the bulk call"></textarea></label>
+      <label class="upload-field">Audio file <input name="audio_file" type="file" accept="audio/*"></label>
+      <button type="submit">Send bulk calls</button>
     </form>
   </section>
 
@@ -92,9 +119,24 @@
 </div>
 
 <script>
-const mode = document.querySelector("#audioMode");
-const sync = () => document.body.dataset.audioMode = mode.value;
-mode.addEventListener("change", sync);
-sync();
+const tabButtons = document.querySelectorAll("[data-call-tab]");
+const tabPanels = document.querySelectorAll("[data-call-panel]");
+const syncAudioMode = () => {
+  tabPanels.forEach((panel) => panel.dataset.audioMode = panel.querySelector(".audio-mode").value);
+};
+
+tabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    tabButtons.forEach((item) => item.classList.toggle("active", item === button));
+    tabPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.callPanel === button.dataset.callTab));
+    syncAudioMode();
+  });
+});
+
+document.querySelectorAll(".audio-mode").forEach((select) => {
+  select.addEventListener("change", syncAudioMode);
+});
+
+syncAudioMode();
 </script>
 {% endblock %}
