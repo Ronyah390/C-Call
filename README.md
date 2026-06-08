@@ -16,9 +16,9 @@ Open-source self-hosted web dashboard for sending SIP voice calls with text-to-s
 - Direct SIP calling through `direct_sip_call.py`
 - Built-in SMSLayer promo banner
 
-## Clone And Run
+## Clone And Run On Windows
 
-```bash
+```powershell
 git clone https://github.com/Ronyah390/C-Call.git
 cd C-Call
 python -m venv .venv
@@ -31,6 +31,44 @@ python app.py
 Open:
 
 `http://127.0.0.1:5000`
+
+## Clone And Run On Android Termux
+
+Install from the official F-Droid Termux build, then run:
+
+```bash
+pkg update
+pkg install python git ffmpeg
+git clone https://github.com/Ronyah390/C-Call.git
+cd C-Call
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+python app.py
+```
+
+Open from the same Android device:
+
+`http://127.0.0.1:5000`
+
+If you want to open the Termux server from another phone or PC on the same Wi-Fi, start it with:
+
+```bash
+HOST=0.0.0.0 python app.py
+```
+
+Then open:
+
+`http://PHONE_LOCAL_IP:5000`
+
+Termux notes:
+
+- Use Wi-Fi when testing SIP. Mobile data often uses carrier-grade NAT and may block or break SIP/RTP UDP traffic.
+- If the web page loads but calls fail, check `instance/direct-sip.log`.
+- `gTTS` needs internet access to generate text-to-speech audio.
+- `ffmpeg` is required for uploaded audio conversion.
+- Some SIP providers reject calls from mobile networks even when the same credentials work on a PC.
 
 ## Configure SIP
 
