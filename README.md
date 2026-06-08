@@ -11,6 +11,8 @@ Open-source self-hosted web dashboard for sending SIP voice calls with text-to-s
 - Text-to-speech call audio with gTTS
 - Custom audio upload support
 - Local call history
+- Optional CDR import for provider duration, status, and cost
+- Optional AmarIP CDR fetch
 - Direct SIP calling through `direct_sip_call.py`
 - Built-in SMSLayer promo banner
 
@@ -61,6 +63,20 @@ Numbers are normalized automatically. These formats are accepted:
 - `017XXXXXXXX`
 - `88017XXXXXXXX`
 - `+88017XXXXXXXX`
+
+## CDR Data
+
+C-Call does not assume every SIP provider exposes CDR in the same format.
+
+By default, call history uses local app data. If your SIP provider gives you CDR data, you can import it from the dashboard as a CSV file. C-Call tries to recognize common columns such as:
+
+- `number`, `callee`, `callee_number`, `destination`, `dst`, `to`
+- `duration`, `duration_seconds`, `billable_seconds`, `billable_duration`
+- `cost`, `call_cost`, `price`, `charge`, `amount`
+- `status`, `disposition`, `hangup_cause`, `sip_status_code`
+- `date`, `start_time`, `created_at`, `timestamp`
+
+If you use AmarIP, open `Settings`, choose `AmarIP API` as the CDR mode, save your AmarIP details, then use `Fetch AmarIP` from the dashboard.
 
 ## Requirements
 

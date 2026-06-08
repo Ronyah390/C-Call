@@ -1,31 +1,144 @@
 {% extends "base.html" %}
 {% block title %}Settings - C-Call{% endblock %}
 {% block content %}
-<section class="settings-hero">
-  <div>
-    <p class="eyebrow">Local configuration</p>
-    <h1>SIP settings</h1>
-    <p>Save the SIP account this self-hosted instance should use for outbound calls. The password stays in the local app database under <code>instance/</code>.</p>
-  </div>
-</section>
+<div class="page-header">
+  <div class="page-tag"><i class="ti ti-settings"></i> Local Configuration</div>
+  <h1 class="page-title">Settings</h1>
+  <p class="page-desc">Configure SIP credentials, dial format, and optional CDR provider data. Secrets stay in the local app database under <code>instance/</code>.</p>
+</div>
 
-<section class="tool-panel settings-panel">
-  <form method="post" class="form">
-    <div class="split">
-      <label>SIP domain <input name="SIP_DOMAIN" value="{{ settings.SIP_DOMAIN }}" placeholder="sip.example.com" required></label>
-      <label>SIP port <input name="SIP_PORT" value="{{ settings.SIP_PORT or '5060' }}" inputmode="numeric" required></label>
-    </div>
-    <label>SIP user <input name="SIP_USER" value="{{ settings.SIP_USER }}" autocomplete="off" required></label>
-    <label>Dial format
-      <select name="ASTERISK_DIAL_FORMAT">
-        <option value="e164_noplus" {% if dial_format == "e164_noplus" %}selected{% endif %}>88017XXXXXXXX</option>
-        <option value="e164" {% if dial_format == "e164" %}selected{% endif %}>+88017XXXXXXXX</option>
-        <option value="local_bd" {% if dial_format == "local_bd" %}selected{% endif %}>017XXXXXXXX</option>
-        <option value="raw" {% if dial_format == "raw" %}selected{% endif %}>Use normalized input</option>
-      </select>
-    </label>
-    <label>SIP password <input name="SIP_PASSWORD" type="password" autocomplete="new-password" placeholder="{{ 'Saved - leave blank to keep' if password_set else 'Enter SIP password' }}"></label>
-    <button type="submit">Save SIP settings</button>
-  </form>
-</section>
+<form method="post" class="settings-layout">
+  <aside class="settings-nav">
+    <a class="snav-item active" href="#sip"><i class="ti ti-phone-call"></i> SIP settings</a>
+    <a class="snav-item" href="#cdr"><i class="ti ti-database"></i> CDR provider</a>
+    <hr class="snav-divider">
+    <a class="snav-item" href="#preferences"><i class="ti ti-adjustments-horizontal"></i> Preferences</a>
+  </aside>
+
+  <div class="settings-content">
+    <section class="section-card" id="sip">
+      <div class="sc-header">
+        <div class="sc-icon"><i class="ti ti-server"></i></div>
+        <div>
+          <div class="sc-title">SIP Server</div>
+          <div class="sc-sub">Outbound call routing endpoint</div>
+        </div>
+      </div>
+      <div class="sc-body">
+        <div class="fgrid2">
+          <div class="fg">
+            <label class="fl">SIP domain <span class="fl-hint">IP or hostname</span></label>
+            <input class="fi fi-mono" name="SIP_DOMAIN" value="{{ settings.SIP_DOMAIN }}" placeholder="sip.example.com" required>
+          </div>
+          <div class="fg">
+            <label class="fl">SIP port</label>
+            <input class="fi fi-mono" name="SIP_PORT" value="{{ settings.SIP_PORT or '5060' }}" placeholder="5060" required>
+          </div>
+        </div>
+        <div class="fg">
+          <label class="fl">SIP user</label>
+          <input class="fi fi-mono" name="SIP_USER" value="{{ settings.SIP_USER }}" autocomplete="off" placeholder="username or number" required>
+        </div>
+        <div class="fg">
+          <label class="fl">Dial format</label>
+          <div class="fs-wrap">
+            <select class="fs" name="ASTERISK_DIAL_FORMAT">
+              <option value="local_bd" {% if dial_format == "local_bd" %}selected{% endif %}>017XXXXXXXX</option>
+              <option value="e164" {% if dial_format == "e164" %}selected{% endif %}>+88017XXXXXXXX</option>
+              <option value="e164_noplus" {% if dial_format == "e164_noplus" %}selected{% endif %}>88017XXXXXXXX</option>
+              <option value="raw" {% if dial_format == "raw" %}selected{% endif %}>Use normalized input</option>
+            </select>
+            <i class="ti ti-chevron-down fs-arrow"></i>
+          </div>
+          <div class="field-note"><i class="ti ti-info-circle"></i> Controls how outbound numbers are formatted before dialing.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <div class="sc-header">
+        <div class="sc-icon"><i class="ti ti-lock"></i></div>
+        <div>
+          <div class="sc-title">Authentication</div>
+          <div class="sc-sub">SIP password stored locally</div>
+        </div>
+      </div>
+      <div class="sc-body">
+        <div class="fg">
+          <label class="fl">SIP password</label>
+          <input class="fi {% if password_set %}fi-saved{% endif %}" name="SIP_PASSWORD" type="password" autocomplete="new-password" placeholder="{{ 'Saved - leave blank to keep' if password_set else 'Enter SIP password' }}">
+          <div class="field-note ok"><i class="ti ti-lock"></i> Saved locally in instance/.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card" id="cdr">
+      <div class="sc-header">
+        <div class="sc-icon"><i class="ti ti-database-dollar"></i></div>
+        <div>
+          <div class="sc-title">CDR Provider</div>
+          <div class="sc-sub">Optional provider duration, status, and cost data</div>
+        </div>
+      </div>
+      <div class="sc-body">
+        <div class="fg">
+          <label class="fl">CDR mode</label>
+          <div class="fs-wrap">
+            <select class="fs" name="CDR_PROVIDER">
+              <option value="manual" {% if cdr_settings.CDR_PROVIDER == "manual" %}selected{% endif %}>Manual CSV import</option>
+              <option value="amarip" {% if cdr_settings.CDR_PROVIDER == "amarip" %}selected{% endif %}>AmarIP API</option>
+              <option value="none" {% if cdr_settings.CDR_PROVIDER == "none" %}selected{% endif %}>Disabled</option>
+            </select>
+            <i class="ti ti-chevron-down fs-arrow"></i>
+          </div>
+        </div>
+        <div class="fgrid2">
+          <div class="fg">
+            <label class="fl">AmarIP base URL</label>
+            <input class="fi fi-mono" name="AMARIP_BASE_URL" value="{{ cdr_settings.AMARIP_BASE_URL }}" placeholder="https://amarip.net">
+          </div>
+          <div class="fg">
+            <label class="fl">AmarIP username</label>
+            <input class="fi fi-mono" name="AMARIP_USERNAME" value="{{ cdr_settings.AMARIP_USERNAME }}" autocomplete="off">
+          </div>
+        </div>
+        <div class="fg">
+          <label class="fl">AmarIP password</label>
+          <input class="fi {% if amarip_password_set %}fi-saved{% endif %}" name="AMARIP_PASSWORD" type="password" autocomplete="new-password" placeholder="{{ 'Saved - leave blank to keep' if amarip_password_set else 'Enter AmarIP password' }}">
+          <div class="field-note"><i class="ti ti-info-circle"></i> If another provider has different CDR fields, use manual CSV import from the dashboard.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card" id="preferences">
+      <div class="sc-header">
+        <div class="sc-icon"><i class="ti ti-adjustments-horizontal"></i></div>
+        <div>
+          <div class="sc-title">Preferences</div>
+          <div class="sc-sub">Current self-hosted defaults</div>
+        </div>
+      </div>
+      <div class="sc-body">
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="tg-title">Log calls</div>
+            <div class="tg-desc">Call history is saved locally after each successful dispatch.</div>
+          </div>
+          <label class="toggle"><input type="checkbox" checked disabled><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="tg-title">CDR matching</div>
+            <div class="tg-desc">Imported CDR records are matched to call history by phone number.</div>
+          </div>
+          <label class="toggle"><input type="checkbox" checked disabled><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <div class="sc-footer">
+        <span class="save-status"><i class="ti ti-shield-lock"></i> Settings are local to this instance.</span>
+        <button class="save-btn" type="submit"><i class="ti ti-device-floppy"></i> Save settings</button>
+      </div>
+    </section>
+  </div>
+</form>
 {% endblock %}

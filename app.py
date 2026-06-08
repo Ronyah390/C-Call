@@ -1,4 +1,5 @@
 import csv
+import json
 import math
 import os
 import re
@@ -6,6 +7,9 @@ import secrets
 import sqlite3
 import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from io import StringIO
 from pathlib import Path
@@ -70,6 +74,16 @@ def init_db() -> None:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS cdr_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                number TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT '',
+                duration_seconds INTEGER NOT NULL DEFAULT 0,
+                cost TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT 'manual',
+                cdr_date TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             """
         )
@@ -150,6 +164,15 @@ def mask_number(number: str) -> str:
     if len(visible) <= 4:
         return "****"
     return f"{'*' * (len(visible) - 4)}{visible[-4:]}"
+
+
+def number_match_key(number: str) -> str:
+    digits = "".join(ch for ch in (number or "") if ch.isdigit())
+    if digits.startswith("880") and len(digits) > 3:
+        digits = digits[3:]
+    if digits.startswith("0") and len(digits) > 1:
+        digits = digits[1:]
+    return digits[-10:]
 
 
 def ffmpeg_path() -> str:
@@ -301,14 +324,145 @@ def call_stats() -> dict[str, int]:
     }
 
 
+def cdr_settings() -> dict[str, str]:
+    return {
+        "CDR_PROVIDER": get_setting("CDR_PROVIDER", "manual"),
+        "AMARIP_BASE_URL": get_setting("AMARIP_BASE_URL", "https://amarip.net"),
+        "AMARIP_USERNAME": get_setting("AMARIP_USERNAME"),
+        "AMARIP_PASSWORD": get_setting("AMARIP_PASSWORD"),
+    }
+
+
+def find_cdr_for_number(number: str) -> sqlite3.Row | None:
+    key = number_match_key(number)
+    if not key:
+        return None
+    rows = get_db().execute("SELECT * FROM cdr_records ORDER BY COALESCE(cdr_date, created_at) DESC, id DESC").fetchall()
+    for row in rows:
+        if number_match_key(row["number"]) == key:
+            return row
+    return None
+
+
+def dashboard_calls() -> list[dict]:
+    rows = get_db().execute("SELECT * FROM calls ORDER BY created_at DESC LIMIT 12").fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        cdr = find_cdr_for_number(row["number"])
+        item["cdr_status"] = cdr["status"] if cdr else ""
+        item["cdr_duration"] = cdr["duration_seconds"] if cdr else None
+        item["cdr_cost"] = cdr["cost"] if cdr else ""
+        result.append(item)
+    return result
+
+
+def first_value(data: dict, names: tuple[str, ...], default: str = "") -> str:
+    lowered = {str(k).strip().lower(): v for k, v in data.items()}
+    for name in names:
+        if name in lowered and lowered[name] not in (None, ""):
+            return str(lowered[name]).strip()
+    return default
+
+
+def parse_duration(value: str) -> int:
+    text = str(value or "").strip()
+    if not text:
+        return 0
+    if ":" in text:
+        parts = [int(float(part or 0)) for part in text.split(":")]
+        total = 0
+        for part in parts:
+            total = total * 60 + part
+        return total
+    try:
+        return int(float(text))
+    except ValueError:
+        return 0
+
+
+def save_cdr_record(record: dict, source: str) -> bool:
+    number = first_value(record, ("number", "callee", "callee_number", "destination", "dst", "to"))
+    if not number:
+        return False
+    digits = "".join(ch for ch in number if ch.isdigit())
+    if len(digits) < 10:
+        return False
+    status = first_value(record, ("status", "disposition", "hangup_cause", "sip_status_code"))
+    duration = parse_duration(first_value(record, ("duration_seconds", "duration", "billable_seconds", "billable_duration", "seconds")))
+    cost = first_value(record, ("cost", "call_cost", "price", "charge", "amount"))
+    cdr_date = first_value(record, ("date", "start_time", "created_at", "time", "timestamp"), None)
+    get_db().execute(
+        """
+        INSERT INTO cdr_records (number, status, duration_seconds, cost, source, cdr_date)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (number, status, duration, cost, source, cdr_date),
+    )
+    return True
+
+
+def import_cdr_csv(file_storage) -> int:
+    if not file_storage or not file_storage.filename:
+        raise ValueError("CDR CSV file is required.")
+    raw_csv = file_storage.read().decode("utf-8-sig", errors="ignore")
+    imported = 0
+    for row in csv.DictReader(StringIO(raw_csv)):
+        if save_cdr_record(row, "manual_csv"):
+            imported += 1
+    if imported == 0:
+        raise ValueError("No CDR rows were imported. Check the CSV headers.")
+    return imported
+
+
+def amarip_request(path: str, method: str = "GET", payload: dict | None = None, token: str | None = None) -> dict:
+    settings = cdr_settings()
+    base_url = settings["AMARIP_BASE_URL"].rstrip("/")
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Accept": "application/json"}
+    if body:
+        headers["Content-Type"] = "application/json"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(f"{base_url}{path}", data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"AmarIP CDR request failed: HTTP {exc.code} {detail[:180]}") from exc
+
+
+def fetch_amarip_cdr(limit: int = 100) -> int:
+    settings = cdr_settings()
+    if not settings["AMARIP_USERNAME"] or not settings["AMARIP_PASSWORD"]:
+        raise ValueError("AmarIP username and password are required in Settings.")
+    login = amarip_request(
+        "/api/login",
+        "POST",
+        {"username": settings["AMARIP_USERNAME"], "password": settings["AMARIP_PASSWORD"]},
+    )
+    token = login.get("token") or login.get("access_token")
+    if not token:
+        raise RuntimeError("AmarIP login did not return a token.")
+    data = amarip_request(f"/api/cdr?{urllib.parse.urlencode({'page': 1, 'per_page': min(limit, 100)})}", token=token)
+    rows = data.get("data", data if isinstance(data, list) else [])
+    imported = 0
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict) and save_cdr_record(row, "amarip"):
+                imported += 1
+    return imported
+
+
 @app.route("/")
 def dashboard():
-    calls = get_db().execute("SELECT * FROM calls ORDER BY created_at DESC LIMIT 12").fetchall()
     return render_template(
         "dashboard.html",
-        calls=calls,
+        calls=dashboard_calls(),
         stats=call_stats(),
         sip_ready=sip_config_ready(),
+        cdr_settings=cdr_settings(),
     )
 
 
@@ -357,13 +511,24 @@ def send_bulk_call():
 def settings():
     if request.method == "POST":
         try:
-            for key in ("SIP_DOMAIN", "SIP_PORT", "SIP_USER", "ASTERISK_DIAL_FORMAT"):
+            for key in (
+                "SIP_DOMAIN",
+                "SIP_PORT",
+                "SIP_USER",
+                "ASTERISK_DIAL_FORMAT",
+                "CDR_PROVIDER",
+                "AMARIP_BASE_URL",
+                "AMARIP_USERNAME",
+            ):
                 set_setting(key, request.form.get(key, "").strip())
             password = request.form.get("SIP_PASSWORD", "")
             if password:
                 set_setting("SIP_PASSWORD", password)
+            amarip_password = request.form.get("AMARIP_PASSWORD", "")
+            if amarip_password:
+                set_setting("AMARIP_PASSWORD", amarip_password)
             get_db().commit()
-            flash("SIP settings saved.", "success")
+            flash("Settings saved.", "success")
         except Exception as exc:
             get_db().rollback()
             flash(str(exc), "error")
@@ -371,7 +536,41 @@ def settings():
 
     config = sip_config()
     password_set = bool(config.pop("SIP_PASSWORD", ""))
-    return render_template("settings.html", settings=config, password_set=password_set, dial_format=dial_format())
+    cdr = cdr_settings()
+    amarip_password_set = bool(cdr.pop("AMARIP_PASSWORD", ""))
+    return render_template(
+        "settings.html",
+        settings=config,
+        password_set=password_set,
+        dial_format=dial_format(),
+        cdr_settings=cdr,
+        amarip_password_set=amarip_password_set,
+        sip_ready=sip_config_ready(),
+    )
+
+
+@app.route("/cdr/import", methods=["POST"])
+def import_cdr():
+    try:
+        imported = import_cdr_csv(request.files.get("cdr_csv"))
+        get_db().commit()
+        flash(f"Imported {imported} CDR records.", "success")
+    except Exception as exc:
+        get_db().rollback()
+        flash(str(exc), "error")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/cdr/fetch-amarip", methods=["POST"])
+def fetch_cdr_amarip():
+    try:
+        imported = fetch_amarip_cdr()
+        get_db().commit()
+        flash(f"Fetched {imported} AmarIP CDR records.", "success")
+    except Exception as exc:
+        get_db().rollback()
+        flash(str(exc), "error")
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/health")

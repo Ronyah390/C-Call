@@ -4,22 +4,30 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}C-Call{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="{{ url_for('dashboard') }}">
-      <span class="brand-mark">C</span>
-      <span>C-Call</span>
+  <nav>
+    <a class="logo" href="{{ url_for('dashboard') }}">
+      <span class="logo-icon">C</span>
+      <span class="logo-text">C-Call</span>
     </a>
-    <nav class="nav">
-      <a href="{{ url_for('dashboard') }}">Dashboard</a>
-      <a href="{{ url_for('settings') }}">Settings</a>
-      <a class="nav-cta" href="https://smslayer.fun" target="_blank" rel="noreferrer">SMSLayer</a>
-    </nav>
-  </header>
+    <div class="nav-links">
+      <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">Settings</a>
+      <a class="nav-pill" href="https://smslayer.fun" target="_blank" rel="noreferrer">SMSLayer</a>
+    </div>
+    <div class="sip-bar">
+      <span class="sip-dot {% if not sip_ready|default(true) %}warn{% endif %}"></span>
+      <span class="sip-label">SIP</span>
+      <span class="sip-val">{{ "Ready" if sip_ready|default(true) else "Setup" }}</span>
+    </div>
+  </nav>
 
-  <main class="page">
+  <main>
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <div class="flash-stack">
