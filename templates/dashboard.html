@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Auto CL Web{% endblock %}
+{% block content %}
+<section class="section-header">
+  <div>
+    <h1>Call dashboard</h1>
+    <p>{{ g.user.email }} · {% if g.user.is_admin %}Admin, unlimited calls{% else %}{{ g.user.credits }} credits{% endif %}</p>
+  </div>
+  <div class="stat-row">
+    <span><b>{{ total.calls }}</b> calls</span>
+    <span><b>{{ total.credits }}</b> credits used</span>
+  </div>
+</section>
+
+{% if not sip_ready %}
+  <div class="flash warning">SIP credentials are not configured. Add them to your private <code>.env</code> before sending real calls.</div>
+{% endif %}
+
+<div class="grid two">
+  <section class="panel">
+    <h2>Send call</h2>
+    <form action="{{ url_for('send_call') }}" method="post" enctype="multipart/form-data" class="form">
+      <label>Phone number <input name="number" placeholder="017XXXXXXXX" required></label>
+      <label>Audio source
+        <select name="audio_mode" id="audioMode">
+          <option value="tts">Text to speech</option>
+          <option value="upload">Upload audio</option>
+        </select>
+      </label>
+      <label class="tts-field">Message <textarea name="message" rows="5" placeholder="Your call message"></textarea></label>
+      <label class="upload-field">Audio file <input name="audio_file" type="file" accept="audio/*"></label>
+      <label>Repeat
+        <select name="repeat_count">
+          <option value="1">1 time</option>
+          <option value="2">2 times</option>
+        </select>
+      </label>
+      <button type="submit">Send call</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Redeem credits</h2>
+    <form action="{{ url_for('redeem') }}" method="post" class="form compact">
+      <label>Redeem code <input name="code" placeholder="XXXX-XXXX-XXXX"></label>
+      <button type="submit">Redeem</button>
+    </form>
+    <h2>Recent calls</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Number</th><th>Mode</th><th>Credits</th><th>Date</th></tr></thead>
+        <tbody>
+          {% for call in calls %}
+            <tr><td>{{ call.number }}</td><td>{{ call.audio_mode }}</td><td>{{ call.credits_charged }}</td><td>{{ call.created_at }}</td></tr>
+          {% else %}
+            <tr><td colspan="4">No calls yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+const mode = document.querySelector("#audioMode");
+const sync = () => document.body.dataset.audioMode = mode.value;
+mode.addEventListener("change", sync);
+sync();
+</script>
+{% endblock %}

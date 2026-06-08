@@ -1,0 +1,15 @@
+.env
+*.db
+*.sqlite
+instance/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+uploads/
+generated/
+*.log
+*.mp3
+*.wav
+*.ulaw
