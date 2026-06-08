@@ -103,7 +103,7 @@ def sip_config() -> dict[str, str]:
 
 
 def dial_format() -> str:
-    return get_setting("ASTERISK_DIAL_FORMAT", os.environ.get("ASTERISK_DIAL_FORMAT", "e164_noplus"))
+    return get_setting("ASTERISK_DIAL_FORMAT", os.environ.get("ASTERISK_DIAL_FORMAT", "local_bd"))
 
 
 def sip_config_ready() -> bool:
