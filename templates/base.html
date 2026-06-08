@@ -3,23 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Auto CL Web{% endblock %}</title>
+  <title>{% block title %}C-Call{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('dashboard' if g.user else 'login') }}">Auto CL Web</a>
+    <a class="brand" href="{{ url_for('dashboard') }}">
+      <span class="brand-mark">C</span>
+      <span>C-Call</span>
+    </a>
     <nav class="nav">
-      {% if g.user %}
-        <a href="{{ url_for('dashboard') }}">Dashboard</a>
-        {% if g.user.is_admin %}<a href="{{ url_for('admin') }}">Admin</a>{% endif %}
-        <form action="{{ url_for('logout') }}" method="post">
-          <button class="link-button" type="submit">Logout</button>
-        </form>
-      {% else %}
-        <a href="{{ url_for('login') }}">Login</a>
-        <a href="{{ url_for('register') }}">Register</a>
-      {% endif %}
+      <a href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('settings') }}">Settings</a>
+      <a class="nav-cta" href="https://smslayer.fun" target="_blank" rel="noreferrer">SMSLayer</a>
     </nav>
   </header>
 

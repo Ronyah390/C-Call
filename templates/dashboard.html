@@ -1,57 +1,87 @@
 {% extends "base.html" %}
-{% block title %}Dashboard - Auto CL Web{% endblock %}
+{% block title %}Dashboard - C-Call{% endblock %}
 {% block content %}
-<section class="section-header">
-  <div>
-    <h1>Call dashboard</h1>
-    <p>{{ g.user.email }} · {% if g.user.is_admin %}Admin, unlimited calls{% else %}{{ g.user.credits }} credits{% endif %}</p>
+<section class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow">Self-hosted SIP voice console</p>
+    <h1>Send voice calls from your own SIP credentials.</h1>
+    <p class="hero-text">Create a text-to-speech message or upload call audio, choose the destination, and place the call from one clean browser dashboard.</p>
+    <div class="hero-actions">
+      <a class="button ghost" href="{{ url_for('settings') }}">Configure SIP</a>
+      <a class="button dark" href="#send-call">Send a call</a>
+    </div>
   </div>
-  <div class="stat-row">
-    <span><b>{{ total.calls }}</b> calls</span>
-    <span><b>{{ total.credits }}</b> credits used</span>
-  </div>
+  <aside class="hero-card">
+    <span class="status-dot {{ 'ready' if sip_ready else 'missing' }}"></span>
+    <p class="card-label">SIP status</p>
+    <strong>{{ "Ready to call" if sip_ready else "Setup required" }}</strong>
+    <span>{{ stats.total_calls }} calls logged · {{ stats.total_minutes }} min</span>
+  </aside>
 </section>
 
+<a class="ad-banner" href="https://smslayer.fun" target="_blank" rel="noreferrer">
+  <div>
+    <span class="ad-kicker">Promoted service</span>
+    <strong>SMSLayer</strong>
+    <span>Bulk SMS from 0.19tk/SMS. New users get 5 free credits.</span>
+  </div>
+  <span class="ad-action">Visit smslayer.fun</span>
+</a>
+
 {% if not sip_ready %}
-  <div class="flash warning">SIP settings are not configured yet. An admin can add them from the Admin page.</div>
+  <div class="flash warning">SIP settings are not configured yet. Open Settings and save your SIP credentials before sending real calls.</div>
 {% endif %}
 
-<div class="grid two">
-  <section class="panel">
-    <h2>Send call</h2>
-    <form action="{{ url_for('send_call') }}" method="post" enctype="multipart/form-data" class="form">
+<div class="workspace">
+  <section class="tool-panel" id="send-call">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Call composer</p>
+        <h2>Send call</h2>
+      </div>
+      <span class="pill">gTTS + custom audio</span>
+    </div>
+    <form action="{{ url_for('send_call') }}" method="post" enctype="multipart/form-data" class="form call-form">
       <label>Phone number <input name="number" placeholder="017XXXXXXXX" required></label>
-      <label>Audio source
-        <select name="audio_mode" id="audioMode">
-          <option value="tts">Text to speech</option>
-          <option value="upload">Upload audio</option>
-        </select>
-      </label>
-      <label class="tts-field">Message <textarea name="message" rows="5" placeholder="Your call message"></textarea></label>
+      <div class="split">
+        <label>Audio source
+          <select name="audio_mode" id="audioMode">
+            <option value="tts">Text to speech</option>
+            <option value="upload">Upload audio</option>
+          </select>
+        </label>
+        <label>Repeat
+          <select name="repeat_count">
+            <option value="1">1 time</option>
+            <option value="2">2 times</option>
+          </select>
+        </label>
+      </div>
+      <label class="tts-field">Message <textarea name="message" rows="6" placeholder="Write the message that should play during the call"></textarea></label>
       <label class="upload-field">Audio file <input name="audio_file" type="file" accept="audio/*"></label>
-      <label>Repeat
-        <select name="repeat_count">
-          <option value="1">1 time</option>
-          <option value="2">2 times</option>
-        </select>
-      </label>
-      <button type="submit">Send call</button>
+      <button type="submit">Send voice call</button>
     </form>
   </section>
 
-  <section class="panel">
-    <h2>Redeem credits</h2>
-    <form action="{{ url_for('redeem') }}" method="post" class="form compact">
-      <label>Redeem code <input name="code" placeholder="XXXX-XXXX-XXXX"></label>
-      <button type="submit">Redeem</button>
-    </form>
-    <h2>Recent calls</h2>
+  <section class="history-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Recent activity</p>
+        <h2>Call history</h2>
+      </div>
+      <span class="pill">{{ stats.total_calls }} total</span>
+    </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Number</th><th>Mode</th><th>Credits</th><th>Date</th></tr></thead>
+        <thead><tr><th>Number</th><th>Mode</th><th>Duration</th><th>Date</th></tr></thead>
         <tbody>
           {% for call in calls %}
-            <tr><td>{{ call.number }}</td><td>{{ call.audio_mode }}</td><td>{{ call.credits_charged }}</td><td>{{ call.created_at }}</td></tr>
+            <tr>
+              <td>{{ call.number }}</td>
+              <td>{{ call.audio_mode }}</td>
+              <td>{{ call.duration_seconds }} sec</td>
+              <td>{{ call.created_at }}</td>
+            </tr>
           {% else %}
             <tr><td colspan="4">No calls yet.</td></tr>
           {% endfor %}

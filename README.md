@@ -1,17 +1,17 @@
-# Auto CL Web
+# C-Call
 
-Open-source web dashboard for sending SIP voice calls with text-to-speech or uploaded audio.
+Open-source self-hosted web dashboard for sending SIP voice calls with text-to-speech or uploaded audio.
 
 ## Features
 
-- Browser-based dashboard for users and admins
-- Send voice calls with text-to-speech audio
-- Upload custom audio for calls
-- Credit charging by call duration
-- Redeem codes for user credits
-- Admin user stats and overall call stats
-- Admin-managed SIP settings from the webpage
+- No registration or login
+- Browser dashboard for sending SIP voice calls
+- Settings page for SIP credentials
+- Text-to-speech call audio with gTTS
+- Custom audio upload support
+- Local call history
 - Direct SIP calling through `direct_sip_call.py`
+- Built-in SMSLayer promo banner
 
 ## Clone And Run
 
@@ -29,38 +29,37 @@ Open:
 
 `http://127.0.0.1:5000`
 
-Default admin account:
+## Configure SIP
 
-```text
-admin@example.com
-change-me
-```
-
-You can change the default admin login before first run by editing only these values in `.env`:
-
-```dotenv
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=change-me
-```
-
-## SIP Setup
-
-After login as admin, open `Admin` and save:
+Open `Settings` in the webpage and save:
 
 - SIP domain
 - SIP port
 - SIP user
 - SIP password
 
-The SIP password is stored in the local app database under `instance/`, which is ignored by git. Users cloning the project do not need to edit source files to configure SIP.
+The settings are stored in the local app database under `instance/`, which is ignored by git. A person cloning the project can configure the app from the browser without editing source code.
+
+## Requirements
+
+- Python 3.11+
+- `ffmpeg` for uploaded audio conversion
+- Internet access for gTTS text-to-speech generation
+- A working SIP account for outbound calls
+
+## Sponsored Banner
+
+The app includes a promotional banner for SMSLayer:
+
+`https://smslayer.fun`
+
+Bulk SMS from `0.19tk/SMS`, with `5` free credits for new users.
 
 ## Production Notes
 
 - Use a strong `FLASK_SECRET_KEY`.
-- Change the default admin password.
-- Use HTTPS in production.
+- Use HTTPS if exposed outside your local machine.
 - Keep `instance/`, `.env`, generated audio, and logs private.
-- Install `ffmpeg`; it is required for uploaded audio conversion.
 
 ## License
 

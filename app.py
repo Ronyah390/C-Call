@@ -4,26 +4,12 @@ import secrets
 import sqlite3
 import subprocess
 import sys
-import tempfile
-import time
 import uuid
-from functools import wraps
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import (
-    Flask,
-    Response,
-    flash,
-    g,
-    redirect,
-    render_template,
-    request as flask_request,
-    session,
-    url_for,
-)
+from flask import Flask, Response, flash, g, redirect, render_template, request, url_for
 from gtts import gTTS
-from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 
@@ -70,29 +56,12 @@ def init_db() -> None:
     with sqlite3.connect(DB_PATH) as conn:
         conn.executescript(
             """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                name TEXT NOT NULL DEFAULT '',
-                credits INTEGER NOT NULL DEFAULT 0,
-                is_admin INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS redeem_codes (
-                code TEXT PRIMARY KEY,
-                credits INTEGER NOT NULL,
-                created_by INTEGER,
-                used_by INTEGER,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                used_at TEXT
-            );
             CREATE TABLE IF NOT EXISTS calls (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL DEFAULT 0,
                 number TEXT NOT NULL,
                 audio_mode TEXT NOT NULL,
-                credits_charged INTEGER NOT NULL,
+                credits_charged INTEGER NOT NULL DEFAULT 0,
                 duration_seconds INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
@@ -103,14 +72,6 @@ def init_db() -> None:
             );
             """
         )
-        admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com").strip().lower()
-        admin_password = os.environ.get("ADMIN_PASSWORD", "change-me")
-        row = conn.execute("SELECT id FROM users WHERE email = ?", (admin_email,)).fetchone()
-        if not row:
-            conn.execute(
-                "INSERT INTO users (email, password_hash, name, credits, is_admin) VALUES (?, ?, ?, 0, 1)",
-                (admin_email, generate_password_hash(admin_password), "Admin"),
-            )
 
 
 def get_setting(key: str, default: str = "") -> str:
@@ -143,41 +104,6 @@ def sip_config() -> dict[str, str]:
 def sip_config_ready() -> bool:
     config = sip_config()
     return all(config.get(name) for name in ("SIP_DOMAIN", "SIP_USER", "SIP_PASSWORD"))
-
-
-def current_user():
-    user_id = session.get("user_id")
-    if not user_id:
-        return None
-    return get_db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-
-
-@app.before_request
-def load_user() -> None:
-    g.user = current_user()
-
-
-def login_required(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if not g.user:
-            return redirect(url_for("login"))
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-def admin_required(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if not g.user:
-            return redirect(url_for("login"))
-        if not g.user["is_admin"]:
-            flash("Admin access is required.", "error")
-            return redirect(url_for("dashboard"))
-        return func(*args, **kwargs)
-
-    return wrapper
 
 
 def normalize_phone_number(raw_number: str) -> str:
@@ -214,24 +140,11 @@ def format_dial_number(normalized_number: str) -> str:
     return digits
 
 
-def number_match_key(number: str) -> str:
-    digits = "".join(ch for ch in (number or "") if ch.isdigit())
-    if digits.startswith("880") and len(digits) > 3:
-        digits = digits[3:]
-    if digits.startswith("0") and len(digits) > 1:
-        digits = digits[1:]
-    return digits[-10:]
-
-
 def mask_number(number: str) -> str:
     visible = "".join(ch for ch in number if ch.isdigit())
     if len(visible) <= 4:
         return "****"
     return f"{'*' * (len(visible) - 4)}{visible[-4:]}"
-
-
-def credits_for_duration(duration_seconds: int) -> int:
-    return max(1, math.ceil(max(1, duration_seconds) / CALL_MAX_DURATION_SECONDS))
 
 
 def ffmpeg_path() -> str:
@@ -301,23 +214,20 @@ def estimate_call_duration_seconds(audio_name: str, repeat_count: int = 1) -> in
 
 def make_call(number: str, audio_name: str, repeat_count: int, max_seconds: int) -> None:
     config = sip_config()
-    required = ["SIP_DOMAIN", "SIP_USER", "SIP_PASSWORD"]
-    missing = [name for name in required if not config.get(name)]
+    missing = [name for name in ("SIP_DOMAIN", "SIP_USER", "SIP_PASSWORD") if not config.get(name)]
     if missing:
         raise RuntimeError(f"Missing SIP config: {', '.join(missing)}")
     audio_path = SOUNDS_DIR / f"{audio_name}.ulaw"
     if not audio_path.exists():
         raise RuntimeError("Converted call audio is missing.")
-    dial_number = format_dial_number(number)
-    log_path = INSTANCE_DIR / "direct-sip.log"
     env = os.environ.copy()
     env.update(config)
-    with log_path.open("ab", buffering=0) as direct_log:
+    with (INSTANCE_DIR / "direct-sip.log").open("ab", buffering=0) as direct_log:
         result = subprocess.run(
             [
                 sys.executable,
                 str(BASE_DIR / "direct_sip_call.py"),
-                dial_number,
+                format_dial_number(number),
                 str(audio_path),
                 str(2 if int(repeat_count) > 1 else 1),
                 str(max(1, int(max_seconds))),
@@ -332,220 +242,77 @@ def make_call(number: str, audio_name: str, repeat_count: int, max_seconds: int)
         raise RuntimeError("Call failed or was not answered.")
 
 
-def require_user_credits(user_id: int, needed: int) -> None:
-    row = get_db().execute("SELECT credits, is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
-    if row["is_admin"]:
-        return
-    if row["credits"] < needed:
-        raise ValueError(f"Not enough credits. Needed {needed}, available {row['credits']}.")
-
-
-def deduct_user_credits(user_id: int, amount: int) -> None:
-    if amount <= 0:
-        return
-    row = get_db().execute("SELECT is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
-    if row and row["is_admin"]:
-        return
-    get_db().execute("UPDATE users SET credits = credits - ? WHERE id = ?", (amount, user_id))
-
-
-def log_call(user_id: int, number: str, mode: str, credits: int, seconds: int) -> None:
+def log_call(number: str, mode: str, seconds: int) -> None:
     get_db().execute(
-        "INSERT INTO calls (user_id, number, audio_mode, credits_charged, duration_seconds) VALUES (?, ?, ?, ?, ?)",
-        (user_id, mask_number(number), mode, credits, seconds),
+        "INSERT INTO calls (user_id, number, audio_mode, credits_charged, duration_seconds) VALUES (0, ?, ?, 0, ?)",
+        (mask_number(number), mode, seconds),
     )
 
 
-def run_user_call(user_id: int, number: str, audio_name: str, mode: str, repeat_count: int) -> dict:
-    normalized = normalize_phone_number(number)
-    seconds = estimate_call_duration_seconds(audio_name, repeat_count)
-    credits = credits_for_duration(seconds)
-    require_user_credits(user_id, credits)
-    max_seconds = credits * CALL_MAX_DURATION_SECONDS
-    make_call(normalized, audio_name, repeat_count, max_seconds)
-    charge = 0 if g.user and g.user["is_admin"] else credits
-    deduct_user_credits(user_id, charge)
-    log_call(user_id, normalized, mode, charge, max_seconds)
-    get_db().commit()
-    return {"number": mask_number(normalized), "duration_seconds": seconds, "credits_charged": charge}
-
-
-def create_redeem_code(created_by: int, credits: int) -> str:
-    if credits <= 0:
-        raise ValueError("Credit amount must be positive.")
-    code = "-".join(
-        "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(4))
-        for _ in range(3)
-    )
-    get_db().execute(
-        "INSERT INTO redeem_codes (code, credits, created_by) VALUES (?, ?, ?)",
-        (code, credits, created_by),
-    )
-    get_db().commit()
-    return code
-
-
-def redeem_code(user_id: int, code: str) -> int:
-    clean = "".join(ch for ch in (code or "").upper() if ch.isalnum())
-    if len(clean) == 12:
-        clean = f"{clean[:4]}-{clean[4:8]}-{clean[8:]}"
-    row = get_db().execute("SELECT * FROM redeem_codes WHERE code = ?", (clean,)).fetchone()
-    if not row:
-        raise ValueError("Redeem code was not found.")
-    if row["used_by"]:
-        raise ValueError("Redeem code has already been used.")
-    get_db().execute("UPDATE users SET credits = credits + ? WHERE id = ?", (row["credits"], user_id))
-    get_db().execute(
-        "UPDATE redeem_codes SET used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ?",
-        (user_id, clean),
-    )
-    get_db().commit()
-    return row["credits"]
-
-
-def normalize_client_name(name: str) -> str:
-    clean = " ".join((name or "").strip().split())
-    if not clean:
-        raise ValueError("Client name is required.")
-    if len(clean) > 64:
-        raise ValueError("Client name is too long.")
-    return clean
+def call_stats() -> dict[str, int]:
+    row = get_db().execute(
+        "SELECT COUNT(*) AS total_calls, COALESCE(SUM(duration_seconds), 0) AS total_seconds FROM calls"
+    ).fetchone()
+    return {
+        "total_calls": int(row["total_calls"]),
+        "total_minutes": math.ceil(int(row["total_seconds"]) / 60) if row["total_seconds"] else 0,
+    }
 
 
 @app.route("/")
-def index():
-    return redirect(url_for("dashboard" if g.user else "login"))
-
-
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if flask_request.method == "POST":
-        email = flask_request.form.get("email", "").strip().lower()
-        password = flask_request.form.get("password", "")
-        name = flask_request.form.get("name", "").strip()
-        if not email or len(password) < 8:
-            flash("Use a valid email and a password with at least 8 characters.", "error")
-            return render_template("register.html")
-        try:
-            get_db().execute(
-                "INSERT INTO users (email, password_hash, name, credits) VALUES (?, ?, ?, 1)",
-                (email, generate_password_hash(password), name),
-            )
-            get_db().commit()
-        except sqlite3.IntegrityError:
-            flash("An account with that email already exists.", "error")
-            return render_template("register.html")
-        flash("Account created. You can sign in now.", "success")
-        return redirect(url_for("login"))
-    return render_template("register.html")
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if flask_request.method == "POST":
-        email = flask_request.form.get("email", "").strip().lower()
-        password = flask_request.form.get("password", "")
-        user = get_db().execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-        if user and check_password_hash(user["password_hash"], password):
-            session.clear()
-            session["user_id"] = user["id"]
-            return redirect(url_for("dashboard"))
-        flash("Invalid email or password.", "error")
-    return render_template("login.html")
-
-
-@app.route("/logout", methods=["POST"])
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
-
-@app.route("/dashboard")
-@login_required
 def dashboard():
-    calls = get_db().execute(
-        "SELECT * FROM calls WHERE user_id = ? ORDER BY created_at DESC LIMIT 10",
-        (g.user["id"],),
-    ).fetchall()
-    total = get_db().execute(
-        "SELECT COUNT(*) AS calls, COALESCE(SUM(credits_charged), 0) AS credits FROM calls WHERE user_id = ?",
-        (g.user["id"],),
-    ).fetchone()
-    sip_ready = sip_config_ready()
-    return render_template("dashboard.html", calls=calls, total=total, sip_ready=sip_ready)
+    calls = get_db().execute("SELECT * FROM calls ORDER BY created_at DESC LIMIT 12").fetchall()
+    return render_template(
+        "dashboard.html",
+        calls=calls,
+        stats=call_stats(),
+        sip_ready=sip_config_ready(),
+    )
 
 
 @app.route("/call", methods=["POST"])
-@login_required
 def send_call():
     try:
-        repeat = 2 if flask_request.form.get("repeat_count") == "2" else 1
-        number = flask_request.form.get("number", "")
-        mode = flask_request.form.get("audio_mode", "tts")
+        repeat = 2 if request.form.get("repeat_count") == "2" else 1
+        number = normalize_phone_number(request.form.get("number", ""))
+        mode = request.form.get("audio_mode", "tts")
         if mode == "upload":
-            audio_name = create_uploaded_audio(flask_request.files.get("audio_file"))
-            result = run_user_call(g.user["id"], number, audio_name, "custom", repeat)
+            audio_name = create_uploaded_audio(request.files.get("audio_file"))
+            audio_mode = "custom"
         else:
-            audio_id = uuid.uuid4().hex[:12]
-            audio_name = create_gtts_audio(flask_request.form.get("message", ""), audio_id)
-            result = run_user_call(g.user["id"], number, audio_name, "tts", repeat)
-        flash(f"Call completed to {result['number']}. Charged {result['credits_charged']} credit.", "success")
+            audio_name = create_gtts_audio(request.form.get("message", ""), uuid.uuid4().hex[:12])
+            audio_mode = "tts"
+        seconds = estimate_call_duration_seconds(audio_name, repeat)
+        max_seconds = max(1, seconds)
+        make_call(number, audio_name, repeat, max_seconds)
+        log_call(number, audio_mode, seconds)
+        get_db().commit()
+        flash(f"Call sent to {mask_number(number)}.", "success")
     except Exception as exc:
         get_db().rollback()
         flash(str(exc), "error")
     return redirect(url_for("dashboard"))
 
 
-@app.route("/redeem", methods=["POST"])
-@login_required
-def redeem():
-    try:
-        credits = redeem_code(g.user["id"], flask_request.form.get("code", ""))
-        flash(f"Redeemed {credits} credits.", "success")
-    except Exception as exc:
-        flash(str(exc), "error")
-    return redirect(url_for("dashboard"))
-
-
-@app.route("/admin", methods=["GET", "POST"])
-@admin_required
-def admin():
-    db = get_db()
-    if flask_request.method == "POST":
-        action = flask_request.form.get("action")
+@app.route("/settings", methods=["GET", "POST"])
+def settings():
+    if request.method == "POST":
         try:
-            if action == "create_code":
-                code = create_redeem_code(g.user["id"], int(flask_request.form.get("credits", "0")))
-                flash(f"Redeem code created: {code}", "success")
-            elif action == "add_user_credits":
-                email = flask_request.form.get("email", "").strip().lower()
-                credits = int(flask_request.form.get("credits", "0"))
-                db.execute("UPDATE users SET credits = credits + ? WHERE email = ?", (credits, email))
-                db.commit()
-                flash("User credits updated.", "success")
-            elif action == "sip_settings":
-                for key in ("SIP_DOMAIN", "SIP_PORT", "SIP_USER"):
-                    set_setting(key, flask_request.form.get(key, "").strip())
-                password = flask_request.form.get("SIP_PASSWORD", "")
-                if password:
-                    set_setting("SIP_PASSWORD", password)
-                db.commit()
-                flash("SIP settings saved.", "success")
+            for key in ("SIP_DOMAIN", "SIP_PORT", "SIP_USER"):
+                set_setting(key, request.form.get(key, "").strip())
+            password = request.form.get("SIP_PASSWORD", "")
+            if password:
+                set_setting("SIP_PASSWORD", password)
+            get_db().commit()
+            flash("SIP settings saved.", "success")
         except Exception as exc:
-            db.rollback()
+            get_db().rollback()
             flash(str(exc), "error")
-        return redirect(url_for("admin"))
+        return redirect(url_for("settings"))
 
-    stats = {
-        "users": db.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"],
-        "credits": db.execute("SELECT COALESCE(SUM(credits), 0) AS c FROM users").fetchone()["c"],
-        "calls": db.execute("SELECT COUNT(*) AS c FROM calls").fetchone()["c"],
-        "used": db.execute("SELECT COALESCE(SUM(credits_charged), 0) AS c FROM calls").fetchone()["c"],
-    }
-    users = db.execute("SELECT id, email, name, credits, is_admin, created_at FROM users ORDER BY created_at DESC LIMIT 20").fetchall()
-    settings = sip_config()
-    settings["SIP_PASSWORD_SET"] = bool(settings.pop("SIP_PASSWORD", ""))
-    return render_template("admin.html", stats=stats, users=users, settings=settings)
+    config = sip_config()
+    password_set = bool(config.pop("SIP_PASSWORD", ""))
+    return render_template("settings.html", settings=config, password_set=password_set)
 
 
 @app.route("/health")

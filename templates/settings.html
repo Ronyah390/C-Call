@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Settings - C-Call{% endblock %}
+{% block content %}
+<section class="settings-hero">
+  <div>
+    <p class="eyebrow">Local configuration</p>
+    <h1>SIP settings</h1>
+    <p>Save the SIP account this self-hosted instance should use for outbound calls. The password stays in the local app database under <code>instance/</code>.</p>
+  </div>
+</section>
+
+<section class="tool-panel settings-panel">
+  <form method="post" class="form">
+    <div class="split">
+      <label>SIP domain <input name="SIP_DOMAIN" value="{{ settings.SIP_DOMAIN }}" placeholder="sip.example.com" required></label>
+      <label>SIP port <input name="SIP_PORT" value="{{ settings.SIP_PORT or '5060' }}" inputmode="numeric" required></label>
+    </div>
+    <label>SIP user <input name="SIP_USER" value="{{ settings.SIP_USER }}" autocomplete="off" required></label>
+    <label>SIP password <input name="SIP_PASSWORD" type="password" autocomplete="new-password" placeholder="{{ 'Saved - leave blank to keep' if password_set else 'Enter SIP password' }}"></label>
+    <button type="submit">Save SIP settings</button>
+  </form>
+</section>
+{% endblock %}
