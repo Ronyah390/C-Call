@@ -16,6 +16,14 @@
       <label>SIP port <input name="SIP_PORT" value="{{ settings.SIP_PORT or '5060' }}" inputmode="numeric" required></label>
     </div>
     <label>SIP user <input name="SIP_USER" value="{{ settings.SIP_USER }}" autocomplete="off" required></label>
+    <label>Dial format
+      <select name="ASTERISK_DIAL_FORMAT">
+        <option value="e164_noplus" {% if dial_format == "e164_noplus" %}selected{% endif %}>88017XXXXXXXX</option>
+        <option value="e164" {% if dial_format == "e164" %}selected{% endif %}>+88017XXXXXXXX</option>
+        <option value="local_bd" {% if dial_format == "local_bd" %}selected{% endif %}>017XXXXXXXX</option>
+        <option value="raw" {% if dial_format == "raw" %}selected{% endif %}>Use normalized input</option>
+      </select>
+    </label>
     <label>SIP password <input name="SIP_PASSWORD" type="password" autocomplete="new-password" placeholder="{{ 'Saved - leave blank to keep' if password_set else 'Enter SIP password' }}"></label>
     <button type="submit">Save SIP settings</button>
   </form>

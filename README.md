@@ -38,8 +38,11 @@ Open `Settings` in the webpage and save:
 - SIP port
 - SIP user
 - SIP password
+- Dial format
 
 The settings are stored in the local app database under `instance/`, which is ignored by git. A person cloning the project can configure the app from the browser without editing source code.
+
+If SIP registration works but calls fail with `SIP/2.0 503 Service Unavailable`, try changing `Dial format` in Settings. Some providers expect `+880...`, some expect `880...`, and others expect local `01...` numbers.
 
 ## Bulk Calls
 

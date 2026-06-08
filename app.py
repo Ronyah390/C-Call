@@ -26,8 +26,6 @@ SOUNDS_DIR = INSTANCE_DIR / "sounds"
 DB_PATH = Path(os.environ.get("CALLBOT_DB", INSTANCE_DIR / "callbot.db"))
 
 CALL_MAX_DURATION_SECONDS = max(1, int(os.environ.get("CALL_MAX_DURATION_SECONDS", "60")))
-ASTERISK_DIAL_FORMAT = os.environ.get("ASTERISK_DIAL_FORMAT", "e164_noplus")
-
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
 app.config["MAX_CONTENT_LENGTH"] = 12 * 1024 * 1024
@@ -104,6 +102,10 @@ def sip_config() -> dict[str, str]:
     }
 
 
+def dial_format() -> str:
+    return get_setting("ASTERISK_DIAL_FORMAT", os.environ.get("ASTERISK_DIAL_FORMAT", "e164_noplus"))
+
+
 def sip_config_ready() -> bool:
     config = sip_config()
     return all(config.get(name) for name in ("SIP_DOMAIN", "SIP_USER", "SIP_PASSWORD"))
@@ -133,12 +135,12 @@ def normalize_phone_number(raw_number: str) -> str:
 def format_dial_number(normalized_number: str) -> str:
     number = normalize_phone_number(normalized_number)
     digits = "".join(ch for ch in number if ch.isdigit())
-    dial_format = ASTERISK_DIAL_FORMAT.strip().lower()
-    if dial_format in {"e164", "plus", "plus_e164"}:
+    selected_format = dial_format().strip().lower()
+    if selected_format in {"e164", "plus", "plus_e164"}:
         return f"+{digits}"
-    if dial_format in {"local_bd", "bd_local"} and digits.startswith("880"):
+    if selected_format in {"local_bd", "bd_local"} and digits.startswith("880"):
         return f"0{digits[3:]}"
-    if dial_format in {"raw", "normalized"}:
+    if selected_format in {"raw", "normalized"}:
         return number
     return digits
 
@@ -217,6 +219,7 @@ def estimate_call_duration_seconds(audio_name: str, repeat_count: int = 1) -> in
 
 def make_call(number: str, audio_name: str, repeat_count: int, max_seconds: int) -> None:
     config = sip_config()
+    config["ASTERISK_DIAL_FORMAT"] = dial_format()
     missing = [name for name in ("SIP_DOMAIN", "SIP_USER", "SIP_PASSWORD") if not config.get(name)]
     if missing:
         raise RuntimeError(f"Missing SIP config: {', '.join(missing)}")
@@ -354,7 +357,7 @@ def send_bulk_call():
 def settings():
     if request.method == "POST":
         try:
-            for key in ("SIP_DOMAIN", "SIP_PORT", "SIP_USER"):
+            for key in ("SIP_DOMAIN", "SIP_PORT", "SIP_USER", "ASTERISK_DIAL_FORMAT"):
                 set_setting(key, request.form.get(key, "").strip())
             password = request.form.get("SIP_PASSWORD", "")
             if password:
@@ -368,7 +371,7 @@ def settings():
 
     config = sip_config()
     password_set = bool(config.pop("SIP_PASSWORD", ""))
-    return render_template("settings.html", settings=config, password_set=password_set)
+    return render_template("settings.html", settings=config, password_set=password_set, dial_format=dial_format())
 
 
 @app.route("/health")
