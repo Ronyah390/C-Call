@@ -1,14 +1,15 @@
+<!-- E:\c-call-ivr\templates\dashboard.html -->
 {% extends "base.html" %}
-{% block title %}Dashboard - C-Call{% endblock %}
+{% block title %}Dashboard - C-Call IVR{% endblock %}
 {% block content %}
 <section class="hero">
   <div class="hero-copy">
-    <div class="hero-tag"><i class="ti ti-broadcast"></i> Self-Hosted SIP Console</div>
-    <h1>Send voice calls from your own <span>SIP credentials.</span></h1>
-    <p>Compose TTS or upload custom audio, target one number or a CSV list, and dispatch calls from a clean dashboard.</p>
+    <div class="hero-tag"><i class="ti ti-broadcast"></i> Self-Hosted SIP Engine</div>
+    <h1>Send voice calls and <span>interactive IVR menus.</span></h1>
+    <p>Compose one-way voice announcements with TTS/audio, or deploy interactive multi-level keypad menus (IVR) with real-time logs.</p>
     <div class="hero-actions">
-      <a class="btn-primary" href="{{ url_for('settings') }}"><i class="ti ti-settings"></i> Configure SIP</a>
-      <a class="btn-secondary" href="#send-call"><i class="ti ti-player-play"></i> Start calling</a>
+      <a class="btn-primary" href="{{ url_for('flows') }}"><i class="ti ti-git-branch"></i> Visual Flow Builder</a>
+      <a class="btn-secondary" href="{{ url_for('settings') }}"><i class="ti ti-settings"></i> Configure SIP</a>
     </div>
   </div>
   <aside class="sip-status-card">
@@ -16,19 +17,20 @@
       <span class="sip-status-label">SIP Status</span>
       <span class="sip-status-badge {{ 'live' if sip_ready else 'missing' }}"><i class="ti ti-circle-filled"></i>{{ "Live" if sip_ready else "Missing" }}</span>
     </div>
-    <div class="sip-status-main">{{ "Ready to call" if sip_ready else "Setup required" }}</div>
-    <div class="sip-status-sub">{{ stats.total_calls }} calls logged · {{ stats.total_minutes }} min</div>
+    <div class="sip-status-main">{{ "Ready to Call" if sip_ready else "Setup Required" }}</div>
+    <div class="sip-status-sub">{{ stats.total_calls or 0 }} calls logged · {{ stats.talk_minutes or 0 }} min talktime</div>
   </aside>
 </section>
 
+<!-- Promoted Ad Banner -->
 <a class="ad-banner" href="https://smslayer.fun" target="_blank" rel="noreferrer">
   <div class="ad-left">
     <div class="ad-icon"><i class="ti ti-message-bolt"></i></div>
     <div>
-      <div class="ad-promo">Promoted · Open Source</div>
-      <div class="ad-title">SMSLayer</div>
-      <div class="ad-desc">Bulk SMS at 0.19 tk/SMS with fast delivery and a simple dashboard.</div>
-      <div class="ad-stat"><i class="ti ti-bolt"></i> New users get <span class="ad-stat-val">5 free credits</span></div>
+      <div class="ad-promo">Promoted · Sponsor</div>
+      <div class="ad-title">SMSLayer.fun</div>
+      <div class="ad-desc">Send bulk SMS easily. Fast delivery, clean dashboard, and APIs for developers.</div>
+      <div class="ad-stat"><i class="ti ti-bolt"></i> SMS rates as low as <span class="ad-stat-val">0.19tk / SMS</span> · New users get <span class="ad-stat-val">5 free credits</span></div>
     </div>
   </div>
   <div class="ad-cta">
@@ -37,214 +39,321 @@
 </a>
 
 {% if not sip_ready %}
-  <div class="flash warning">SIP settings are not configured yet. Open Settings and save your SIP credentials before sending real calls.</div>
+  <div class="banner warn"><i class="ti ti-alert-triangle"></i> SIP credentials are not configured yet. Open <a href="{{ url_for('settings') }}">Settings</a> to save your SIP credentials before calling.</div>
 {% endif %}
 
 <div class="grid2">
-  <section class="card" id="send-call">
+  <section class="card" id="call-composer-section">
     <div class="card-header">
       <div class="card-title">Call Composer</div>
-      <span class="card-badge badge-teal">gTTS + Custom audio</span>
+      <span class="card-badge badge-teal">IVR + Voice Broadcast</span>
     </div>
 
+    <!-- Main Tabs: Single vs Bulk -->
     <div class="tab-row">
-      <button class="tab active" type="button" data-call-tab="single">Single call</button>
-      <button class="tab" type="button" data-call-tab="bulk">Bulk call</button>
+      <button class="tab active" type="button" data-call-tab="single">Single Call</button>
+      <button class="tab" type="button" data-call-tab="bulk">Bulk Call</button>
     </div>
 
-    <form action="{{ url_for('send_call') }}" method="post" enctype="multipart/form-data" class="form js-progress-form call-tab active" data-call-panel="single">
+    <!-- 1. Single Call Form -->
+    <form action="{{ url_for('send_call') }}" method="post" enctype="multipart/form-data" class="form call-tab active" data-call-panel="single">
       <div class="form-group">
-        <label class="form-label">Phone number</label>
+        <label class="form-label">Phone Number</label>
         <input class="form-input" name="number" placeholder="017XXXXXXXX" required>
       </div>
+
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Audio source</label>
-          <select class="form-select audio-mode" name="audio_mode">
-            <option value="tts">Text to speech</option>
-            <option value="upload">Upload audio</option>
+          <label class="form-label">Call Mode</label>
+          <select class="form-select js-mode-select" name="call_mode" data-target="single">
+            <option value="ivr">Interactive IVR Flow</option>
+            <option value="direct">One-way Audio Message</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Repeat</label>
-          <select class="form-select" name="repeat_count">
-            <option value="1">1 time</option>
-            <option value="2">2 times</option>
-          </select>
+          <label class="form-label">Customer Name</label>
+          <input class="form-input" name="name" placeholder="Name (optional)">
         </div>
       </div>
-      <div class="form-group tts-field">
-        <label class="form-label">Message</label>
-        <textarea class="form-textarea" name="message" placeholder="Write the message that should play during the call"></textarea>
+
+      <!-- IVR Section -->
+      <div class="form-group js-ivr-fields-single">
+        <label class="form-label">Interactive IVR Flow</label>
+        {% if flows %}
+          <div class="fs-wrap">
+            <select class="form-select" name="flow_id">
+              {% for f in flows %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
+            </select>
+            <span class="fs-arrow"><i class="ti ti-chevron-down"></i></span>
+          </div>
+        {% else %}
+          <p class="field-note"><i class="ti ti-info-circle"></i> No IVR flows built yet. <a href="{{ url_for('flows') }}">Create one first</a>.</p>
+        {% endif %}
       </div>
-      <div class="form-group upload-field">
-        <label class="form-label">Audio file</label>
-        <input class="form-input" name="audio_file" type="file" accept="audio/*">
-      </div>
-      <button class="call-btn" type="submit"><i class="ti ti-phone-outgoing"></i> Send voice call</button>
-      <div class="progress-wrap">
-        <div class="progress-label"><span class="progress-step">Preparing call...</span><span class="progress-pct">0%</span></div>
-        <div class="progress-track"><div class="progress-bar"></div></div>
-        <div class="progress-steps-row">
-          <span class="pstep"><i class="ti ti-wifi"></i> SIP Auth</span>
-          <span class="pstep"><i class="ti ti-waveform"></i> Audio</span>
-          <span class="pstep"><i class="ti ti-phone"></i> Dialing</span>
-          <span class="pstep"><i class="ti ti-check"></i> Done</span>
+
+      <!-- Direct (One-Way) Section -->
+      <div class="js-direct-fields-single" style="display:none;">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Audio Source</label>
+            <select class="form-select js-audio-source" name="audio_mode" data-target="single">
+              <option value="tts">Text-to-Speech ({{ {'gtts':'gTTS','elevenlabs':'ElevenLabs','gemini':'Gemini'}.get(tts_provider, 'gTTS') }})</option>
+              <option value="upload">Upload Audio File</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Repeats</label>
+            <select class="form-select" name="repeat_count">
+              <option value="1">1 Time</option>
+              <option value="2">2 Times</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group tts-field-single">
+          <label class="form-label">TTS Message</label>
+          <textarea class="form-textarea" name="message" placeholder="Type the message to play in the call (e.g. বাংলা/English)"></textarea>
+        </div>
+        
+        <div class="form-group upload-field-single" style="display:none;">
+          <label class="form-label">Audio File</label>
+          <input class="form-input" name="audio_file" type="file" accept="audio/*,.mp3,.wav">
+          <div class="field-note"><i class="ti ti-info-circle"></i> Uploaded file will be converted to 8kHz mono U-law (.ulaw) automatically.</div>
         </div>
       </div>
+
+      <button class="call-btn" type="submit"><i class="ti ti-phone-outgoing"></i> Launch Call</button>
     </form>
 
-    <form action="{{ url_for('send_bulk_call') }}" method="post" enctype="multipart/form-data" class="form js-progress-form call-tab" data-call-panel="bulk">
+    <!-- 2. Bulk Call Form -->
+    <form action="{{ url_for('send_bulk_call') }}" method="post" enctype="multipart/form-data" class="form call-tab" data-call-panel="bulk" style="display:none;">
       <div class="form-group">
-        <label class="form-label">Phone numbers</label>
-        <textarea class="form-textarea" name="numbers" placeholder="017XXXXXXXX&#10;88018XXXXXXXX&#10;+88019XXXXXXXX"></textarea>
+        <label class="form-label">Phone Numbers</label>
+        <textarea class="form-textarea" name="numbers" placeholder="017XXXXXXXX&#10;88018XXXXXXXX&#10;+88019XXXXXXXX" rows="4"></textarea>
       </div>
+
       <div class="form-group">
-        <label class="form-label">CSV number file</label>
+        <label class="form-label">Or Upload CSV file</label>
         <input class="form-input" name="numbers_csv" type="file" accept=".csv,text/csv">
-        <div class="field-note"><i class="ti ti-info-circle"></i> CSV cells are scanned and normalized automatically.</div>
+        <div class="field-note"><i class="ti ti-info-circle"></i> CSV rows are parsed and numbers formatted automatically.</div>
       </div>
+
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Audio source</label>
-          <select class="form-select audio-mode" name="audio_mode">
-            <option value="tts">Text to speech</option>
-            <option value="upload">Upload audio</option>
+          <label class="form-label">Call Mode</label>
+          <select class="form-select js-mode-select" name="call_mode" data-target="bulk">
+            <option value="ivr">Interactive IVR Flow</option>
+            <option value="direct">One-way Audio Message</option>
           </select>
         </div>
-        <div class="form-group">
-          <label class="form-label">Repeat</label>
-          <select class="form-select" name="repeat_count">
-            <option value="1">1 time</option>
-            <option value="2">2 times</option>
-          </select>
+        <div class="form-group js-ivr-fields-bulk">
+          <label class="form-label">Interactive IVR Flow</label>
+          {% if flows %}
+            <div class="fs-wrap">
+              <select class="form-select" name="flow_id">
+                {% for f in flows %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
+              </select>
+              <span class="fs-arrow"><i class="ti ti-chevron-down"></i></span>
+            </div>
+          {% else %}
+            <p class="field-note"><i class="ti ti-info-circle"></i> No IVR flows built yet. <a href="{{ url_for('flows') }}">Create one first</a>.</p>
+          {% endif %}
         </div>
       </div>
-      <div class="form-group tts-field">
-        <label class="form-label">Message</label>
-        <textarea class="form-textarea" name="message" placeholder="This message will play for every number in the bulk call"></textarea>
-      </div>
-      <div class="form-group upload-field">
-        <label class="form-label">Audio file</label>
-        <input class="form-input" name="audio_file" type="file" accept="audio/*">
-      </div>
-      <button class="call-btn" type="submit"><i class="ti ti-send"></i> Send bulk calls</button>
-      <div class="progress-wrap">
-        <div class="progress-label"><span class="progress-step">Preparing batch...</span><span class="progress-pct">0%</span></div>
-        <div class="progress-track"><div class="progress-bar"></div></div>
-        <div class="progress-steps-row">
-          <span class="pstep"><i class="ti ti-list-check"></i> Validate</span>
-          <span class="pstep"><i class="ti ti-waveform"></i> Audio</span>
-          <span class="pstep"><i class="ti ti-phone"></i> Dialing</span>
-          <span class="pstep"><i class="ti ti-check"></i> Done</span>
+
+      <!-- Direct (One-Way) Bulk Section -->
+      <div class="js-direct-fields-bulk" style="display:none;">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Audio Source</label>
+            <select class="form-select js-audio-source" name="audio_mode" data-target="bulk">
+              <option value="tts">Text-to-Speech ({{ {'gtts':'gTTS','elevenlabs':'ElevenLabs','gemini':'Gemini'}.get(tts_provider, 'gTTS') }})</option>
+              <option value="upload">Upload Audio File</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Repeats</label>
+            <select class="form-select" name="repeat_count">
+              <option value="1">1 Time</option>
+              <option value="2">2 Times</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group tts-field-bulk">
+          <label class="form-label">TTS Message</label>
+          <textarea class="form-textarea" name="message" placeholder="Type the message to play to all bulk targets"></textarea>
+        </div>
+        
+        <div class="form-group upload-field-bulk" style="display:none;">
+          <label class="form-label">Audio File</label>
+          <input class="form-input" name="audio_file" type="file" accept="audio/*,.mp3,.wav">
         </div>
       </div>
+
+      <button class="call-btn" type="submit"><i class="ti ti-send"></i> Launch Bulk Call</button>
     </form>
   </section>
 
+  <!-- Recent Calls Panel -->
   <section class="card">
     <div class="card-header">
-      <div class="card-title">Call History</div>
-      <span class="total-badge">{{ stats.total_calls }}</span>
+      <div class="card-title">Recent Calls</div>
+      <span class="total-badge">{{ stats.total_calls or 0 }}</span>
     </div>
     <div class="table-wrap">
-      <table class="history-table">
-        <thead><tr><th>Number</th><th>Mode</th><th>Duration</th><th>Cost</th><th>Date</th></tr></thead>
-        <tbody>
-          {% for call in calls %}
+      {% if recent %}
+        <table class="history-table data">
+          <thead>
             <tr>
-              <td class="number-cell">{{ call.number }}</td>
-              <td><span class="mode-pill mode-{{ 'custom' if call.audio_mode == 'custom' else 'tts' }}">{{ call.audio_mode }}</span></td>
-              <td class="duration-cell">
-                {% if call.cdr_duration is not none %}{{ call.cdr_duration }} sec{% else %}{{ call.duration_seconds }} sec{% endif %}
-                {% if call.cdr_status %}<br><span class="cdr-status">{{ call.cdr_status }}</span>{% endif %}
-              </td>
-              <td class="duration-cell">{{ call.cdr_cost or "-" }}</td>
-              <td class="date-cell">{{ call.created_at }}</td>
+              <th>Number</th>
+              <th>Mode / Flow</th>
+              <th>Status</th>
+              <th>Talktime</th>
+              <th>Time</th>
             </tr>
-          {% else %}
-            <tr><td colspan="5"><div class="empty-history"><i class="ti ti-phone-off empty-icon"></i>No calls yet.</div></td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {% for c in recent %}
+              <tr data-call-id="{{ c.id }}" onclick="window.location='{{ url_for('call_detail', call_id=c.id) }}'">
+                <td class="number-cell mono">{{ c.masked }}</td>
+                <td>
+                  {% if c.call_type == 'direct' %}
+                    <span class="mode-pill mode-custom">Direct Call</span>
+                  {% else %}
+                    <span class="mode-pill mode-tts">{{ c.flow_name or 'IVR' }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="pill {{ c.status }}" data-cell="status">{{ c.status }}</span>
+                </td>
+                <td data-cell="talk" class="duration-cell">{{ c.talk_seconds }}s</td>
+                <td class="date-cell">{{ c.started_at[:16] }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="empty-history">
+          <div class="empty-icon"><i class="ti ti-phone-off"></i></div>
+          <div>No call history found.</div>
+        </div>
+      {% endif %}
     </div>
+
+    <!-- CDR Import Forms (C-Call Feature) -->
+    <details class="bulk" style="margin-top: 1.5rem;">
+      <summary>Provider CDR Logs (Fetch / Import)</summary>
+      <div class="stack" style="margin-top: 1rem; gap: 1rem;">
+        {% if cdr_settings.CDR_PROVIDER == 'amarip' %}
+          <form method="post" action="{{ url_for('fetch_cdr_amarip_route') }}" style="display:inline;">
+            <button type="submit" class="save-btn" style="width:100%;"><i class="ti ti-cloud-download"></i> Fetch AmarIP CDRs</button>
+          </form>
+        {% endif %}
+        
+        <form method="post" action="{{ url_for('import_cdr') }}" enctype="multipart/form-data" class="row">
+          <div style="flex:1;">
+            <label>Upload CDR CSV
+              <input type="file" name="cdr_csv" accept=".csv" required style="padding: 5px 10px;">
+            </label>
+          </div>
+          <button type="submit" class="secondary" style="margin-bottom:2px;"><i class="ti ti-file-import"></i> Import</button>
+        </form>
+      </div>
+    </details>
   </section>
 </div>
 
-<section class="ad-banner cdr-panel">
-  <div class="ad-left">
-    <div class="ad-icon"><i class="ti ti-database-import"></i></div>
-    <div>
-      <div class="ad-promo">Optional CDR</div>
-      <div class="ad-title">Provider duration and cost</div>
-      <div class="ad-desc">Import a provider CDR CSV, or fetch AmarIP CDR if you configured it in Settings.</div>
-    </div>
-  </div>
-  <form action="{{ url_for('import_cdr') }}" method="post" enctype="multipart/form-data" class="inline-cdr-form">
-    <input class="form-input" name="cdr_csv" type="file" accept=".csv,text/csv" required>
-    <button class="ad-btn" type="submit"><i class="ti ti-upload"></i> Import CDR</button>
-  </form>
-  {% if cdr_settings.CDR_PROVIDER == "amarip" %}
-    <form action="{{ url_for('fetch_cdr_amarip') }}" method="post">
-      <button class="ad-btn" type="submit"><i class="ti ti-cloud-download"></i> Fetch AmarIP</button>
-    </form>
-  {% endif %}
-</section>
-
 <script>
-const tabButtons = document.querySelectorAll("[data-call-tab]");
-const tabPanels = document.querySelectorAll("[data-call-panel]");
-
-function syncAudioMode() {
-  tabPanels.forEach((panel) => panel.dataset.audioMode = panel.querySelector(".audio-mode").value);
-}
-
-tabButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    tabButtons.forEach((item) => item.classList.toggle("active", item === button));
-    tabPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.callPanel === button.dataset.callTab));
-    syncAudioMode();
+// Tab Switching
+document.querySelectorAll('[data-call-tab]').forEach(tabBtn => {
+  tabBtn.addEventListener('click', () => {
+    document.querySelectorAll('[data-call-tab]').forEach(b => b.classList.remove('active'));
+    tabBtn.classList.add('active');
+    
+    const targetPanel = tabBtn.getAttribute('data-call-tab');
+    document.querySelectorAll('[data-call-panel]').forEach(panel => {
+      if (panel.getAttribute('data-call-panel') === targetPanel) {
+        panel.style.display = 'block';
+      } else {
+        panel.style.display = 'none';
+      }
+    });
   });
 });
 
-document.querySelectorAll(".audio-mode").forEach((select) => select.addEventListener("change", syncAudioMode));
-syncAudioMode();
-
-document.querySelectorAll(".js-progress-form").forEach((form) => {
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const button = form.querySelector(".call-btn");
-    const progress = form.querySelector(".progress-wrap");
-    const bar = form.querySelector(".progress-bar");
-    const pct = form.querySelector(".progress-pct");
-    const step = form.querySelector(".progress-step");
-    const steps = form.querySelectorAll(".pstep");
-    const labels = ["Authenticating SIP...", "Preparing audio...", "Dialing...", "Finalizing..."];
-    let index = 0;
-    button.classList.add("loading");
-    button.disabled = true;
-    progress.classList.add("show");
-    const timer = setInterval(() => {
-      const value = Math.min(92, 18 + index * 22);
-      bar.style.width = value + "%";
-      pct.textContent = value + "%";
-      step.textContent = labels[Math.min(index, labels.length - 1)];
-      steps.forEach((item, idx) => {
-        item.classList.toggle("done", idx < index);
-        item.classList.toggle("active", idx === index);
-      });
-      index += 1;
-    }, 850);
-    try {
-      await fetch(form.action, { method: "POST", body: new FormData(form) });
-      bar.style.width = "100%";
-      pct.textContent = "100%";
-      step.textContent = "Done";
-    } finally {
-      clearInterval(timer);
-      window.location.reload();
+// Mode Switching (IVR vs Direct)
+document.querySelectorAll('.js-mode-select').forEach(select => {
+  select.addEventListener('change', (e) => {
+    const target = select.getAttribute('data-target');
+    const val = e.target.value;
+    
+    if (val === 'ivr') {
+      document.querySelector(`.js-ivr-fields-${target}`).style.display = 'block';
+      document.querySelector(`.js-direct-fields-${target}`).style.display = 'none';
+      // Adjust parent layout sizes
+      if (target === 'bulk') {
+        select.parentElement.nextElementSibling.style.display = 'block';
+      }
+    } else {
+      document.querySelector(`.js-ivr-fields-${target}`).style.display = 'none';
+      document.querySelector(`.js-direct-fields-${target}`).style.display = 'block';
+      if (target === 'bulk') {
+        select.parentElement.nextElementSibling.style.display = 'none';
+      }
     }
   });
 });
+
+// Audio Source Switching (TTS vs Upload)
+document.querySelectorAll('.js-audio-source').forEach(select => {
+  select.addEventListener('change', (e) => {
+    const target = select.getAttribute('data-target');
+    const val = e.target.value;
+    
+    if (val === 'tts') {
+      document.querySelector(`.tts-field-${target}`).style.display = 'block';
+      document.querySelector(`.upload-field-${target}`).style.display = 'none';
+    } else {
+      document.querySelector(`.tts-field-${target}`).style.display = 'none';
+      document.querySelector(`.upload-field-${target}`).style.display = 'block';
+    }
+  });
+});
+
+// Live Polling for Recent Calls list
+async function refreshActive() {
+  let data;
+  try {
+    const res = await fetch('/api/active');
+    data = await res.json();
+  } catch (_) {
+    return;
+  }
+  
+  let anyLive = false;
+  for (const c of data.calls) {
+    const tr = document.querySelector(`tr[data-call-id="${c.id}"]`);
+    if (!tr) continue;
+    
+    const pill = tr.querySelector('[data-cell="status"]');
+    if (pill) {
+      pill.textContent = c.status;
+      pill.className = 'pill ' + c.status;
+    }
+    
+    const talkCell = tr.querySelector('[data-cell="talk"]');
+    if (talkCell) {
+      talkCell.textContent = c.talk_seconds + 's';
+    }
+    
+    if (c.live) {
+      anyLive = true;
+    }
+  }
+  
+  setTimeout(refreshActive, anyLive ? 1500 : 5000);
+}
+refreshActive();
 </script>
 {% endblock %}

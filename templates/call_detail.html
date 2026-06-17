@@ -1,0 +1,233 @@
+<!-- E:\c-call-ivr\templates\call_detail.html -->
+{% extends "base.html" %}
+{% block title %}Call #{{ call.id }} - C-Call IVR{% endblock %}
+{% block content %}
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+  <div>
+    <div class="page-tag"><i class="ti ti-activity"></i> Journey Log</div>
+    <h1 class="page-title">Call #{{ call.id }}
+      <span id="status-pill" class="pill {{ call.status }}">{{ call.status }}</span>
+      <span id="live-badge" class="live-badge" hidden>● LIVE</span>
+    </h1>
+  </div>
+  <div class="head-actions">
+    <button id="hangup-btn" class="danger btn-secondary" style="color:var(--red); border-color:var(--red); padding: 7px 15px; font-size:13.5px;" hidden><i class="ti ti-phone-off"></i> Hang Up</button>
+    <a class="btn-secondary" style="padding: 7px 15px; font-size:13.5px;" href="{{ url_for('dashboard') }}"><i class="ti ti-arrow-left"></i> Dashboard</a>
+  </div>
+</div>
+
+<section class="stat-grid">
+  <div class="stat">
+    <span class="stat-num mono">{{ call.masked }}</span>
+    <span class="stat-label">{{ call.contact_name or 'Customer' }}</span>
+  </div>
+  <div class="stat">
+    <span class="stat-num">
+      {% if call.call_type == 'direct' %}
+        One-way Call
+      {% else %}
+        {{ call.flow_name or 'IVR Flow' }}
+      {% endif %}
+    </span>
+    <span class="stat-label">Call Type</span>
+  </div>
+  <div class="stat">
+    <span class="stat-num" id="s-ring">{{ call.ring_seconds }}s</span>
+    <span class="stat-label">Ring Duration</span>
+  </div>
+  <div class="stat">
+    <span class="stat-num" id="s-talk">{{ call.talk_seconds }}s</span>
+    <span class="stat-label">Talk Duration</span>
+  </div>
+  
+  {% if call.call_type == 'ivr' %}
+    <div class="stat">
+      <span class="stat-num" id="s-keys">{{ call.digits_pressed }}</span>
+      <span class="stat-label">Digits Pressed</span>
+    </div>
+    <div class="stat">
+      <span class="stat-num" id="s-fin">{{ 'Yes' if call.reached_terminal else 'No' }}</span>
+      <span class="stat-label">Completed Flow</span>
+    </div>
+  {% endif %}
+</section>
+
+<p class="muted small" id="sip-line" style="margin-bottom: 1.5rem; font-family: var(--fm);">
+  {% if call.sip_final_status %}SIP Code: {{ call.sip_final_status }}{% if call.error %} · Error: {{ call.error }}{% endif %}{% endif %}
+</p>
+
+<!-- Recording Card -->
+<section class="card" id="rec-card" {% if not recording %}hidden{% endif %}>
+  <h2>Recording Playback</h2>
+  <audio id="rec-audio" controls {% if recording %}src="{{ url_for('recording_file', filename=recording) }}"{% endif %} style="margin-top: 10px;"></audio>
+</section>
+
+<!-- Direct Call specific properties -->
+{% if call.call_type == 'direct' %}
+<section class="card">
+  <h2>Voice Broadcast Details</h2>
+  <div class="stack" style="gap: 12px; margin-top: 10px;">
+    <div>
+      <span class="form-label" style="margin-bottom: 2px;">Audio Mode</span>
+      <span class="pill menu" style="font-size: 13px;">{{ call.audio_mode | upper }}</span>
+    </div>
+    
+    {% if call.audio_mode == 'tts' %}
+      <div>
+        <span class="form-label" style="margin-bottom: 2px;">Broadcast Message</span>
+        <div style="padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font-style: italic; line-height: 1.6; color: var(--text);">
+          “{{ call.message }}”
+        </div>
+      </div>
+    {% else %}
+      <div>
+        <span class="form-label" style="margin-bottom: 2px;">Audio File Name</span>
+        <code style="background: var(--surface); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); font-family: var(--fm);">{{ call.audio_name }}.ulaw</code>
+      </div>
+    {% endif %}
+    
+    <div>
+      <span class="form-label" style="margin-bottom: 2px;">Repeat Configuration</span>
+      <span>Played {{ call.repeat_count }} times</span>
+    </div>
+
+    {% if call.cdr_status %}
+      <div style="border-top: 1px solid var(--border); margin-top: 10px; padding-top: 15px;">
+        <span class="pill completed" style="margin-bottom: 10px;">Matched CDR record</span>
+        <div class="form-row" style="margin-top: 8px;">
+          <div>
+            <span class="form-label" style="margin-bottom: 2px;">Provider Status</span>
+            <strong>{{ call.cdr_status }}</strong>
+          </div>
+          <div>
+            <span class="form-label" style="margin-bottom: 2px;">Billable seconds</span>
+            <strong class="mono">{{ call.cdr_duration }}s</strong>
+          </div>
+          <div>
+            <span class="form-label" style="margin-bottom: 2px;">Cost charged</span>
+            <strong style="color: var(--teal);" class="mono">{{ call.cdr_cost }}</strong>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+<!-- IVR Journey Timeline Card -->
+{% if call.call_type == 'ivr' %}
+<section class="card">
+  <h2>Customer Journey — Step-by-Step <span class="muted small" id="ev-count"></span></h2>
+  <ol class="timeline" id="timeline" style="margin-top: 15px;">
+    {% for e in events %}
+      <li class="ev {{ e.event_type }}">
+        <span class="ev-type">{{ e.event_type }}</span>
+        {% if e.digit %}<span class="key">{{ e.digit }}</span>{% endif %}
+        {% if e.node_name %}<span class="ev-node">{{ e.node_name }}</span>{% endif %}
+        {% if e.response_ms %}<span class="muted small">{{ e.response_ms }}ms to respond</span>{% endif %}
+        {% if e.detail %}<span class="muted small">{{ e.detail }}</span>{% endif %}
+        <span class="ev-time muted small">+{{ (e.at_offset_ms / 1000) | round(1) }}s</span>
+      </li>
+    {% endfor %}
+  </ol>
+  <p class="muted" id="empty-note" {% if events %}hidden{% endif %}><i class="ti ti-loader spin" style="font-size:14px;"></i> Waiting for call to connect...</p>
+</section>
+{% endif %}
+
+<script>
+const CALL_ID = {{ call.id }};
+const CALL_TYPE = "{{ call.call_type }}";
+const RECORD_URL = "{{ url_for('recording_file', filename='__F__') }}";
+const timeline = document.getElementById('timeline');
+const statusPill = document.getElementById('status-pill');
+const liveBadge = document.getElementById('live-badge');
+const hangupBtn = document.getElementById('hangup-btn');
+const emptyNote = document.getElementById('empty-note');
+
+function row(e) {
+  const li = document.createElement('li');
+  li.className = 'ev ' + e.event_type;
+  const parts = [`<span class="ev-type">${e.event_type}</span>`];
+  if (e.digit) parts.push(`<span class="key">${e.digit}</span>`);
+  if (e.node_name) parts.push(`<span class="ev-node">${e.node_name}</span>`);
+  if (e.response_ms) parts.push(`<span class="muted small">${e.response_ms}ms to respond</span>`);
+  if (e.detail) parts.push(`<span class="muted small">${e.detail}</span>`);
+  parts.push(`<span class="ev-time muted small">+${(e.at_offset_ms/1000).toFixed(1)}s</span>`);
+  li.innerHTML = parts.join('');
+  return li;
+}
+
+async function poll() {
+  let d;
+  try {
+    const res = await fetch(`/api/calls/${CALL_ID}`);
+    d = await res.json();
+  } catch (_) {
+    return true; // Keep polling on errors
+  }
+
+  statusPill.textContent = d.status;
+  statusPill.className = 'pill ' + d.status;
+  
+  // Direct calls cannot be hung up dynamically from UI
+  if (CALL_TYPE === 'ivr') {
+    liveBadge.hidden = !d.live;
+    hangupBtn.hidden = !d.live;
+  } else {
+    liveBadge.hidden = true;
+    hangupBtn.hidden = true;
+  }
+  
+  document.getElementById('s-ring').textContent = d.ring_seconds + 's';
+  document.getElementById('s-talk').textContent = d.talk_seconds + 's';
+  
+  const sKeys = document.getElementById('s-keys');
+  if (sKeys) sKeys.textContent = d.digits_pressed;
+  
+  const sFin = document.getElementById('s-fin');
+  if (sFin) sFin.textContent = d.reached_terminal ? 'Yes' : 'No';
+  
+  const sipLine = document.getElementById('sip-line');
+  if (sipLine) {
+    sipLine.textContent = d.sip_final_status ? ('SIP Code: ' + d.sip_final_status + (d.error ? ' · Error: ' + d.error : '')) : '';
+  }
+
+  // Update timeline events for IVR
+  if (CALL_TYPE === 'ivr' && timeline) {
+    if (d.events.length > timeline.children.length) {
+      for (let i = timeline.children.length; i < d.events.length; i++) {
+        timeline.appendChild(row(d.events[i]));
+      }
+      emptyNote.hidden = true;
+    }
+    const evCount = document.getElementById('ev-count');
+    if (evCount) {
+      evCount.textContent = d.events.length ? `(${d.events.length})` : '';
+    }
+  }
+
+  if (d.recording) {
+    const card = document.getElementById('rec-card');
+    if (card && card.hidden) {
+      card.hidden = false;
+      document.getElementById('rec-audio').src = RECORD_URL.replace('__F__', d.recording);
+    }
+  }
+  return d.live; // returns true if call is still live
+}
+
+if (hangupBtn) {
+  hangupBtn.addEventListener('click', async () => {
+    hangupBtn.disabled = true;
+    hangupBtn.textContent = 'Hanging up…';
+    await fetch(`/api/calls/${CALL_ID}/hangup`, { method: 'POST' });
+  });
+}
+
+(async function loop() {
+  while (await poll()) {
+    await new Promise(r => setTimeout(r, 1500));
+  }
+})();
+</script>
+{% endblock %}

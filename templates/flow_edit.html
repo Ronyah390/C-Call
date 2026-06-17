@@ -1,0 +1,347 @@
+<!-- E:\c-call-ivr\templates\flow_edit.html -->
+{% extends "base.html" %}
+{% block title %}Edit {{ flow.name }} - C-Call IVR{% endblock %}
+{% block content %}
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+  <div>
+    <div class="page-tag"><i class="ti ti-git-branch"></i> Flow Designer</div>
+    <h1 class="page-title">{{ flow.name }}</h1>
+    <p class="page-desc">{{ flow.description or 'No description provided.' }}</p>
+  </div>
+  <div style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
+    <a class="btn-secondary" href="{{ url_for('flows') }}"><i class="ti ti-arrow-left"></i> Back to Flows</a>
+    <form method="post" action="{{ url_for('flow_delete', flow_id=flow.id) }}"
+          onsubmit="return confirm('Delete this entire flow, all nodes, and all keypress mappings? Call history will remain, but it will no longer link to this flow.')">
+      <button class="danger" type="submit"><i class="ti ti-trash"></i> Delete Flow</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid2">
+  <!-- 1. Add Node Card -->
+  <section class="card">
+    <div class="card-header">
+      <div class="card-title">Add Menu Node</div>
+    </div>
+    <form method="post" action="{{ url_for('flow_add_node', flow_id=flow.id) }}" class="stack" enctype="multipart/form-data">
+      <div class="form-group">
+        <label class="form-label">Node Name</label>
+        <input class="form-input" name="name" placeholder="e.g., Main Menu, Sales Message" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Node Type</label>
+        <select class="form-select js-node-type-select" name="node_type">
+          <option value="menu">Menu (plays prompt & gathers DTMF keypress)</option>
+          <option value="message">Message (plays announcement then hangs up)</option>
+          <option value="transfer">Transfer (transfers call to another number)</option>
+          <option value="hangup">Hang Up (silently ends call)</option>
+        </select>
+      </div>
+
+      <div class="form-group js-prompt-group">
+        <label class="form-label">Prompt Text (Spoken via TTS)</label>
+        <textarea class="form-textarea" name="prompt_text" rows="3" placeholder="বাংলার জন্য ১ চাপুন, For English press 2."></textarea>
+      </div>
+
+      <div class="form-row js-audio-lang-group">
+        <div class="form-group">
+          <label class="form-label">TTS Language</label>
+          <input class="form-input" name="prompt_lang" value="bn">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Or Upload Audio File</label>
+          <input class="form-input" name="prompt_file" type="file" accept="audio/*,.mp3,.wav">
+        </div>
+      </div>
+
+      <div class="form-row js-meta-group">
+        <div class="form-group js-timeout-field">
+          <label class="form-label">Gather Timeout (s)</label>
+          <input class="form-input" type="number" name="gather_timeout_seconds" value="8" min="1">
+        </div>
+        <div class="form-group js-retries-field">
+          <label class="form-label">Max Retries</label>
+          <input class="form-input" type="number" name="max_retries" value="2" min="0">
+        </div>
+      </div>
+      
+      <div class="form-group js-transfer-field" style="display:none;">
+        <label class="form-label">Transfer Phone Number</label>
+        <input class="form-input" name="transfer_number" placeholder="016XXXXXXXX">
+        <div class="field-note"><i class="ti ti-info-circle"></i> The app tries SIP REFER first, then falls back to app-side call bridging if REFER is blocked.</div>
+      </div>
+
+      <button class="call-btn" type="submit"><i class="ti ti-plus"></i> Add Node</button>
+    </form>
+  </section>
+
+  <!-- 2. Connect Keypresses & Settings Card -->
+  <section class="card">
+    <div class="card-header">
+      <div class="card-title">Connect Keypresses (Transitions)</div>
+    </div>
+    
+    {% if nodes %}
+      <form method="post" action="{{ url_for('flow_add_transition', flow_id=flow.id) }}" class="stack">
+        <div class="form-group">
+          <label class="form-label">From Node</label>
+          <div class="fs-wrap">
+            <select class="form-select" name="node_id" required>
+              {% for n in nodes %}
+                {% if n.node_type == 'menu' %}
+                  <option value="{{ n.id }}">{{ n.name }} ({{ n.node_type }})</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+            <span class="fs-arrow"><i class="ti ti-chevron-down"></i></span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">When Caller Presses Key</label>
+            <input class="form-input" name="digit" maxlength="1" placeholder="1, 2, *, #" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Go to Destination Node</label>
+            <div class="fs-wrap">
+              <select class="form-select" name="next_node_id" required>
+                {% for n in nodes %}<option value="{{ n.id }}">{{ n.name }} ({{ n.node_type }})</option>{% endfor %}
+              </select>
+              <span class="fs-arrow"><i class="ti ti-chevron-down"></i></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Transition Label (optional)</label>
+          <input class="form-input" name="label" placeholder="e.g., Sales department">
+        </div>
+
+        <button class="call-btn" type="submit"><i class="ti ti-arrows-left-right"></i> Map Keypress</button>
+      </form>
+
+      <hr style="border:0; border-top:1px solid var(--border); margin: 1.5rem 0;">
+
+      <!-- Set Start Node -->
+      <div class="card-header" style="margin-bottom: 1rem;">
+        <div class="card-title">Entry Point (Start Node)</div>
+      </div>
+      <form method="post" action="{{ url_for('flow_set_root', flow_id=flow.id) }}" class="form-row" style="align-items:flex-end;">
+        <div class="form-group" style="flex:1; margin-bottom:0;">
+          <select class="form-select" name="root_node_id">
+            {% for n in nodes %}
+              <option value="{{ n.id }}" {{ 'selected' if n.id == flow.root_node_id }}>{{ n.name }} ({{ n.node_type }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="secondary" style="height:42px;"><i class="ti ti-check"></i> Set Start Node</button>
+      </form>
+    {% else %}
+      <div class="empty-history" style="padding:1rem;">
+        <div class="empty-icon"><i class="ti ti-alert-circle"></i></div>
+        <div>Create at least one node on the left to map transitions or set starting point.</div>
+      </div>
+    {% endif %}
+  </section>
+</div>
+
+<!-- 3. Menu Tree (Graph representation) -->
+<section class="card" style="margin-top: 2rem;">
+  <div class="card-header">
+    <div class="card-title">Flow Diagram & Node List</div>
+  </div>
+
+  {% if nodes %}
+    {% for n in nodes %}
+      <div class="node {{ 'root' if n.id == flow.root_node_id }}">
+        <div class="node-head">
+          <div>
+            <span class="pill {{ n.node_type }}">{{ n.node_type }}</span>
+            <strong style="margin-left: 8px; font-size: 15px;">{{ n.name }}</strong>
+            {% if n.id == flow.root_node_id %}<span class="tag">START</span>{% endif %}
+          </div>
+          <div class="node-actions">
+            <button class="secondary small js-node-edit-toggle" type="button" data-target="node-edit-{{ n.id }}">
+              <i class="ti ti-edit"></i> Edit
+            </button>
+            <form method="post" action="{{ url_for('flow_delete_node', flow_id=flow.id, node_id=n.id) }}" onsubmit="return confirm('Delete node & its transitions?')">
+              <button class="danger small" type="submit" style="background:none; border:none; cursor:pointer;"><i class="ti ti-trash"></i> Delete</button>
+            </form>
+          </div>
+        </div>
+        
+        <div style="margin-top: 10px; padding-left: 10px; border-left: 2px solid var(--border2);">
+          {% if n.prompt_text %}
+            <p class="prompt" style="color: var(--text);">“{{ n.prompt_text }}”</p>
+          {% endif %}
+          {% if n.prompt_audio %}
+            <p class="muted small" style="margin-top:5px;"><i class="ti ti-music"></i> Audio file: <code>{{ n.prompt_audio }}.ulaw</code></p>
+          {% endif %}
+          {% if n.node_type == 'transfer' %}
+            <p class="muted small" style="margin-top:5px; color:var(--amber);"><i class="ti ti-phone-forwarded"></i> Transfer Target: <strong>{{ n.transfer_number }}</strong></p>
+          {% endif %}
+        </div>
+
+        <div class="node-edit-panel" id="node-edit-{{ n.id }}" style="display:none;">
+          <form method="post" action="{{ url_for('flow_update_node', flow_id=flow.id, node_id=n.id) }}" enctype="multipart/form-data" class="stack">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Node Name</label>
+                <input class="form-input" name="name" value="{{ n.name }}" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Node Type</label>
+                <select class="form-select js-edit-node-type" name="node_type" data-node="{{ n.id }}">
+                  <option value="menu" {{ 'selected' if n.node_type == 'menu' }}>Menu (gathers keypress)</option>
+                  <option value="message" {{ 'selected' if n.node_type == 'message' }}>Message (plays then hangs up)</option>
+                  <option value="transfer" {{ 'selected' if n.node_type == 'transfer' }}>Transfer</option>
+                  <option value="hangup" {{ 'selected' if n.node_type == 'hangup' }}>Hang Up</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group js-edit-prompt js-edit-prompt-{{ n.id }}" style="{{ 'display:none;' if n.node_type == 'hangup' else '' }}">
+              <label class="form-label">Prompt Text</label>
+              <textarea class="form-textarea" name="prompt_text" rows="4">{{ n.prompt_text }}</textarea>
+              <div class="field-note"><i class="ti ti-info-circle"></i> Change text here, then tick Regenerate voice if you want new audio from this text.</div>
+            </div>
+
+            <div class="form-row js-edit-audio js-edit-audio-{{ n.id }}" style="{{ 'display:none;' if n.node_type == 'hangup' else '' }}">
+              <div class="form-group">
+                <label class="form-label">TTS Language</label>
+                <input class="form-input" name="prompt_lang" value="{{ n.prompt_lang or 'bn' }}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Upload Replacement Audio</label>
+                <input class="form-input" name="prompt_file" type="file" accept="audio/*,.mp3,.wav">
+              </div>
+            </div>
+
+            <div class="form-row js-edit-meta js-edit-meta-{{ n.id }}" style="{{ '' if n.node_type == 'menu' else 'display:none;' }}">
+              <div class="form-group">
+                <label class="form-label">Gather Timeout (s)</label>
+                <input class="form-input" type="number" name="gather_timeout_seconds" value="{{ n.gather_timeout_seconds or 8 }}" min="1">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Max Retries</label>
+                <input class="form-input" type="number" name="max_retries" value="{{ n.max_retries or 2 }}" min="0">
+              </div>
+            </div>
+
+            <div class="form-group js-edit-transfer js-edit-transfer-{{ n.id }}" style="{{ '' if n.node_type == 'transfer' else 'display:none;' }}">
+              <label class="form-label">Transfer Phone Number</label>
+              <input class="form-input" name="transfer_number" value="{{ n.transfer_number }}" placeholder="016XXXXXXXX">
+              <div class="field-note"><i class="ti ti-info-circle"></i> Use the real agent or forwarding number. The app tries SIP REFER first, then falls back to app-side call bridging.</div>
+            </div>
+
+            <div class="edit-checks js-edit-audio js-edit-audio-{{ n.id }}" style="{{ 'display:none;' if n.node_type == 'hangup' else '' }}">
+              <label class="check-row">
+                <input type="checkbox" name="regenerate_audio" value="1">
+                <span>Regenerate voice from prompt text</span>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" name="clear_audio" value="1">
+                <span>Clear current audio</span>
+              </label>
+            </div>
+
+            <div class="form-row" style="align-items:center;">
+              <button class="call-btn" type="submit"><i class="ti ti-device-floppy"></i> Save Node Changes</button>
+              <button class="secondary js-node-edit-toggle" type="button" data-target="node-edit-{{ n.id }}" style="height:45px; justify-content:center;">
+                <i class="ti ti-x"></i> Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {% set tlist = transitions.get(n.id, []) %}
+        {% if tlist %}
+          <ul class="branches" style="margin-top: 12px;">
+            {% for t in tlist %}
+              <li style="display:flex; align-items:center; gap:8px;">
+                <span class="key">{{ t.digit }}</span> <i class="ti ti-arrow-narrow-right"></i> <strong>{{ t.next_name or '—' }}</strong>
+                {% if t.label %}<span class="muted small">({{ t.label }})</span>{% endif %}
+                <form method="post" action="{{ url_for('flow_delete_transition', flow_id=flow.id, tid=t.id) }}" style="display:inline; margin:0; padding:0;">
+                  <button class="btn-link danger small" type="submit" style="color:var(--red);"><i class="ti ti-x"></i> remove</button>
+                </form>
+              </li>
+            {% endfor %}
+          </ul>
+        {% elif n.node_type == 'menu' %}
+          <p class="muted small" style="margin-top: 10px;"><i class="ti ti-info-circle"></i> No keypad transitions configured yet.</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-history">
+      <div class="empty-icon"><i class="ti ti-git-fork"></i></div>
+      <div>No nodes in this flow. Create nodes above to build your IVR menu tree.</div>
+    </div>
+  {% endif %}
+</section>
+
+<script>
+// Toggle field visibility on node type changes
+const nodeSelect = document.querySelector('.js-node-type-select');
+if (nodeSelect) {
+  nodeSelect.addEventListener('change', (e) => {
+    const type = e.target.value;
+    const promptGrp = document.querySelector('.js-prompt-group');
+    const audioLangGrp = document.querySelector('.js-audio-lang-group');
+    const metaGrp = document.querySelector('.js-meta-group');
+    const transferField = document.querySelector('.js-transfer-field');
+    
+    if (type === 'hangup') {
+      promptGrp.style.display = 'none';
+      audioLangGrp.style.display = 'none';
+      metaGrp.style.display = 'none';
+      transferField.style.display = 'none';
+    } else if (type === 'transfer') {
+      promptGrp.style.display = 'block';
+      audioLangGrp.style.display = 'flex';
+      metaGrp.style.display = 'none';
+      transferField.style.display = 'block';
+    } else if (type === 'message') {
+      promptGrp.style.display = 'block';
+      audioLangGrp.style.display = 'flex';
+      metaGrp.style.display = 'none';
+      transferField.style.display = 'none';
+    } else { // menu
+      promptGrp.style.display = 'block';
+      audioLangGrp.style.display = 'flex';
+      metaGrp.style.display = 'flex';
+      transferField.style.display = 'none';
+    }
+  });
+}
+
+document.querySelectorAll('.js-node-edit-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const panel = document.getElementById(btn.getAttribute('data-target'));
+    if (!panel) return;
+    panel.style.display = panel.style.display === 'none' || !panel.style.display ? 'block' : 'none';
+  });
+});
+
+function updateEditNodeFields(select) {
+  const id = select.getAttribute('data-node');
+  const type = select.value;
+  document.querySelectorAll(`.js-edit-prompt-${id}, .js-edit-audio-${id}`).forEach(el => {
+    el.style.display = type === 'hangup' ? 'none' : '';
+  });
+  document.querySelectorAll(`.js-edit-meta-${id}`).forEach(el => {
+    el.style.display = type === 'menu' ? '' : 'none';
+  });
+  document.querySelectorAll(`.js-edit-transfer-${id}`).forEach(el => {
+    el.style.display = type === 'transfer' ? '' : 'none';
+  });
+}
+
+document.querySelectorAll('.js-edit-node-type').forEach(select => {
+  select.addEventListener('change', () => updateEditNodeFields(select));
+  updateEditNodeFields(select);
+});
+</script>
+{% endblock %}

@@ -1,9 +1,19 @@
 services:
-  auto-cl-web:
-    build: .
-    restart: unless-stopped
-    network_mode: host
-    env_file:
-      - .env
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ivr
+      POSTGRES_PASSWORD: ivr
+      POSTGRES_DB: ivr
+    ports:
+      - "5432:5432"
     volumes:
-      - ./instance:/app/instance
+      - ivr_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ivr -d ivr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ivr_pgdata:

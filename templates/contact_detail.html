@@ -1,0 +1,77 @@
+<!-- E:\c-call-ivr\templates\contact_detail.html -->
+{% extends "base.html" %}
+{% block title %}{{ contact.name or contact.masked }} - C-Call IVR{% endblock %}
+{% block content %}
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+  <div>
+    <div class="page-tag"><i class="ti ti-user"></i> Customer profile</div>
+    <h1 class="page-title">{{ contact.name or 'Unnamed Customer' }}</h1>
+    <p class="page-desc">Normalized Number: <strong class="mono" style="color:var(--teal);">{{ contact.number }}</strong></p>
+  </div>
+  <a class="btn-secondary" href="{{ url_for('analytics') }}"><i class="ti ti-arrow-left"></i> Back to Analytics</a>
+</div>
+
+<div class="grid2" style="grid-template-columns: 1.5fr 1fr; margin-top: 1.5rem;">
+  <!-- Call History -->
+  <section class="card">
+    <h2>Call History</h2>
+    <div class="table-wrap" style="margin-top: 10px;">
+      {% if calls %}
+        <table class="data history-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Mode / Flow</th>
+              <th>Status</th>
+              <th class="num">Talktime</th>
+              <th class="num">Digits</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in calls %}
+              <tr onclick="window.location='{{ url_for('call_detail', call_id=c.id) }}'" style="cursor: pointer;">
+                <td class="date-cell">{{ c.started_at[:16] }}</td>
+                <td>
+                  {% if c.call_type == 'direct' %}
+                    <span class="mode-pill mode-custom">Direct Call</span>
+                  {% else %}
+                    <span class="mode-pill mode-tts">{{ c.flow_name or 'IVR' }}</span>
+                  {% endif %}
+                </td>
+                <td><span class="pill {{ c.status }}">{{ c.status }}</span></td>
+                <td class="num mono">{{ c.talk_seconds }}s</td>
+                <td class="num mono">{% if c.call_type == 'ivr' %}{{ c.digits_pressed }}{% else %}—{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No calls logged for this customer.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Profile Metadata card -->
+  <section class="card">
+    <h2>Customer info</h2>
+    <div class="stack" style="gap: 15px; margin-top: 15px;">
+      <div>
+        <span class="form-label" style="margin-bottom: 2px;">Name</span>
+        <strong style="font-size: 16px; color:var(--text);">{{ contact.name or '—' }}</strong>
+      </div>
+      <div>
+        <span class="form-label" style="margin-bottom: 2px;">Tags</span>
+        <p style="color: var(--text2);">{{ contact.tags or 'No tags yet.' }}</p>
+      </div>
+      <div>
+        <span class="form-label" style="margin-bottom: 2px;">Internal Notes</span>
+        <p style="color: var(--text2);">{{ contact.notes or 'No notes logged.' }}</p>
+      </div>
+      <div>
+        <span class="form-label" style="margin-bottom: 2px;">Record Created</span>
+        <span class="date-cell">{{ contact.created_at[:16] }}</span>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

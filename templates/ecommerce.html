@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Ecommerce Integration — C-Call IVR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-tag"><i class="ti ti-shopping-cart"></i> Ecommerce</div>
+  <h1 class="page-title">Order Confirmation Calls</h1>
+  <p class="page-desc">Auto-call customers when an order is placed. Integrate with any ecommerce platform via a simple REST API or webhook.</p>
+</div>
+
+<div class="grid2" style="grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+
+  <!-- Settings card -->
+  <div class="card" style="margin:0;">
+    <div class="card-header">
+      <span class="card-title"><i class="ti ti-settings" style="color:var(--teal);margin-right:6px;"></i>Call Configuration</span>
+    </div>
+    <form method="post" action="{{ url_for('ecommerce_save') }}" class="stack">
+      <div class="form-group">
+        <label class="form-label">Message Template</label>
+        <textarea class="form-textarea" name="ORDER_MESSAGE_TEMPLATE" rows="4">{{ order_template }}</textarea>
+        <div class="field-note"><i class="ti ti-info-circle"></i> Placeholders: <code>{customer_name}</code> <code>{order_id}</code> <code>{total_amount}</code> <code>{items}</code></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">IVR Flow (optional)</label>
+        <select class="form-select" name="ORDER_CALL_FLOW_ID">
+          <option value="">— Use TTS direct call ({{ tts_provider }}) —</option>
+          {% for f in flows %}
+          <option value="{{ f.id }}" {{ 'selected' if order_flow_id|string == f.id|string }}>{{ f.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="field-note"><i class="ti ti-info-circle"></i> Assign an IVR flow to collect delivery confirmation from the customer.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <div class="api-key-row">
+          <input class="form-input mono" id="api-key-display"
+                 value="{{ api_key if api_key else '(not generated yet)' }}" readonly>
+          <button type="button" class="copy-btn" onclick="copyKey()" title="Copy">
+            <i class="ti ti-copy"></i>
+          </button>
+        </div>
+      </div>
+      <div class="form-row" style="gap:.75rem;">
+        <button class="save-btn" type="submit" style="flex:2;">
+          <i class="ti ti-device-floppy"></i> Save
+        </button>
+        <button class="save-btn" type="submit" name="regenerate_key" value="1"
+                style="flex:1; background:var(--surface); color:var(--text); border:1px solid var(--border2);"
+                onclick="return confirm('Generate a new API key? The old key will stop working.')">
+          <i class="ti ti-refresh"></i> New Key
+        </button>
+      </div>
+    </form>
+
+    <form method="post" action="{{ url_for('ecommerce_test') }}" class="stack" style="margin-top:1.4rem; padding-top:1.4rem; border-top:1px solid var(--border);">
+      <div class="card-header" style="margin-bottom:.6rem;">
+        <span class="card-title"><i class="ti ti-phone-check" style="color:var(--teal);margin-right:6px;"></i>Test Order Call</span>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Phone Number</label>
+          <input class="form-input" name="phone" placeholder="017XXXXXXXX" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Customer Name</label>
+          <input class="form-input" name="customer_name" value="Test Customer">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Order ID</label>
+          <input class="form-input" name="order_id" value="TEST-ORDER">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Total Amount</label>
+          <input class="form-input" name="total_amount" value="500 BDT">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Items</label>
+        <input class="form-input" name="items" value="Test item">
+      </div>
+      <button class="save-btn" type="submit">
+        <i class="ti ti-player-play"></i> Send Test Order Call
+      </button>
+    </form>
+  </div>
+
+  <!-- API docs card -->
+  <div class="card" style="margin:0;">
+    <div class="card-header">
+      <span class="card-title"><i class="ti ti-api" style="color:var(--teal);margin-right:6px;"></i>API Reference</span>
+      <span class="card-badge">REST</span>
+    </div>
+
+    <div class="api-endpoint">
+      <span class="api-method">POST</span>
+      <span class="api-path">/api/v1/order-call</span>
+    </div>
+
+    <div class="api-section-label">Authentication</div>
+    <div class="code-block">X-API-Key: YOUR_API_KEY</div>
+
+    <div class="api-section-label">Request Body (JSON)</div>
+    <pre class="code-block">{
+  "phone":         "+8801XXXXXXXXX",
+  "order_id":      "ORD-2024-001",
+  "customer_name": "Rahul Islam",
+  "total_amount":  "1,250 BDT",
+  "items":         "2x T-Shirt, 1x Cap",
+  "message":       "(optional override text)"
+}</pre>
+
+    <div class="api-section-label">Success Response</div>
+    <pre class="code-block">{
+  "success": true,
+  "call_id": 42,
+  "message": "Order confirmation call initiated"
+}</pre>
+
+    <div class="api-section-label">cURL Example</div>
+    <pre class="code-block" id="curl-example">curl -X POST \
+  {{ request.host_url }}api/v1/order-call \
+  -H "X-API-Key: {{ api_key or 'YOUR_KEY' }}" \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+8801700000000","order_id":"ORD1","customer_name":"Test","total_amount":"500 BDT"}'</pre>
+
+    <div class="api-section-label">WooCommerce Hook</div>
+    <pre class="code-block">add_action('woocommerce_order_status_processing',
+  function($order_id) {
+    $order = wc_get_order($order_id);
+    wp_remote_post('{{ request.host_url }}api/v1/order-call', [
+      'headers' => ['X-API-Key' => 'YOUR_KEY',
+                    'Content-Type' => 'application/json'],
+      'body' => json_encode([
+        'phone'         => $order->get_billing_phone(),
+        'order_id'      => $order_id,
+        'customer_name' => $order->get_billing_first_name(),
+        'total_amount'  => $order->get_formatted_order_total(),
+      ])
+    ]);
+  }
+);</pre>
+  </div>
+</div>
+
+<!-- Shopify / generic section -->
+<div class="card" style="margin-top:1.5rem;">
+  <div class="card-header">
+    <span class="card-title"><i class="ti ti-plug" style="color:var(--teal);margin-right:6px;"></i>Platform Integrations</span>
+  </div>
+  <div class="integrations-grid">
+    <div class="integration-card">
+      <div class="int-icon"><i class="ti ti-brand-shopify"></i></div>
+      <div class="int-title">Shopify</div>
+      <div class="int-desc">Create an Order webhook pointing to <code>/api/v1/order-call</code> in <em>Settings → Notifications → Webhooks</em>. Map <code>phone</code> from <code>order.phone</code> or <code>order.billing_address.phone</code>.</div>
+    </div>
+    <div class="integration-card">
+      <div class="int-icon"><i class="ti ti-brand-wordpress"></i></div>
+      <div class="int-title">WooCommerce</div>
+      <div class="int-desc">Use the PHP snippet above in your theme's <code>functions.php</code>. Fires when payment is received and order status changes to <em>Processing</em>.</div>
+    </div>
+    <div class="integration-card">
+      <div class="int-icon"><i class="ti ti-webhook"></i></div>
+      <div class="int-title">Any Platform</div>
+      <div class="int-desc">Send a POST request from any webhook or backend. The only required field is <code>phone</code>. Use <code>message</code> to override the default TTS script entirely.</div>
+    </div>
+    <div class="integration-card">
+      <div class="int-icon"><i class="ti ti-robot"></i></div>
+      <div class="int-title">n8n / Zapier</div>
+      <div class="int-desc">Add an HTTP Request node triggered on "New Order". Set method to POST, URL to your C-Call endpoint, and add <code>X-API-Key</code> as a custom header.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function copyKey() {
+  const val = document.getElementById('api-key-display').value;
+  navigator.clipboard.writeText(val).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.innerHTML = '<i class="ti ti-check"></i>';
+    setTimeout(() => btn.innerHTML = '<i class="ti ti-copy"></i>', 1500);
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,145 @@
+<!-- E:\c-call-ivr\templates\analytics.html -->
+{% extends "base.html" %}
+{% block title %}Analytics - C-Call IVR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-tag"><i class="ti ti-chart-bar"></i> Customer Insights</div>
+  <h1 class="page-title">Flow Analytics</h1>
+  <p class="page-desc">Examine call performance outcomes, customer keypad navigation stats, and drop-off points in your active IVR flows.</p>
+</div>
+
+<section class="stat-grid">
+  <div class="stat">
+    <span class="stat-num">{{ totals.calls or 0 }}</span>
+    <span class="stat-label">Total Calls</span>
+  </div>
+  <div class="stat">
+    <span class="stat-num">
+      {% if totals.calls %}
+        {{ ((totals.answered or 0) * 100 // totals.calls) }}%
+      {% else %}0%{% endif %}
+    </span>
+    <span class="stat-label">Answer Rate</span>
+  </div>
+  <div class="stat">
+    <span class="stat-num mono">{{ totals.avg_talk or 0 }}s</span>
+    <span class="stat-label">Avg. Talk Time</span>
+  </div>
+  <div class="stat">
+    <span class="stat-num">{{ totals.digits or 0 }}</span>
+    <span class="stat-label">Keypresses (DTMF)</span>
+  </div>
+</section>
+
+<div class="columns">
+  <!-- Outcomes Card -->
+  <section class="card">
+    <h2>Call Outcomes</h2>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Outcome</th>
+          <th class="num">Calls</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in outcomes %}
+          <tr>
+            <td><span class="pill {{ o.status }}">{{ o.status }}</span></td>
+            <td class="num mono">{{ o.n }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="2" class="muted">No call records logged yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Keypad Frequency -->
+  <section class="card">
+    <h2>Most Pressed Keypad Digits</h2>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Digit</th>
+          <th class="num">KeyPresses</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in digit_stats %}
+          <tr>
+            <td><span class="key">{{ d.digit }}</span></td>
+            <td class="num mono">{{ d.n }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="2" class="muted">No keypress events logged yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<!-- Node Engagement Drop-offs -->
+<section class="card" style="margin-top: 1.5rem;">
+  <h2>Node Engagement & Drop-off Analysis</h2>
+  <div class="table-wrap">
+    <table class="data history-table">
+      <thead>
+        <tr>
+          <th>Node Name</th>
+          <th>Type</th>
+          <th class="num">Reached (unique)</th>
+          <th class="num">Keypresses (total)</th>
+          <th class="num">Avg. Key Latency</th>
+          <th class="num" style="color: var(--red);">Drop-offs (here)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for n in node_stats %}
+          <tr>
+            <td><strong>{{ n.name }}</strong></td>
+            <td><span class="pill {{ n.node_type }}">{{ n.node_type }}</span></td>
+            <td class="num mono">{{ n.reached }}</td>
+            <td class="num mono">{{ n.keypresses }}</td>
+            <td class="num mono">{{ n.avg_response_ms }}ms</td>
+            <td class="num mono" style="color: var(--red); font-weight: bold;">{{ n.dropoffs }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="muted">No node interaction statistics generated yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Active Customers -->
+<section class="card" style="margin-top: 1.5rem;">
+  <h2>Top Active Customers</h2>
+  <div class="table-wrap">
+    <table class="data history-table">
+      <thead>
+        <tr>
+          <th>Customer Number</th>
+          <th>Name</th>
+          <th class="num">Calls</th>
+          <th class="num">Digits Pressed</th>
+          <th>Last Call Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in top_customers %}
+          <tr onclick="window.location='{{ url_for('contact_detail', contact_id=c.id) }}'" style="cursor: pointer;">
+            <td class="mono">{{ c.masked }}</td>
+            <td>{{ c.name or '—' }}</td>
+            <td class="num mono">{{ c.calls }}</td>
+            <td class="num mono">{{ c.digits }}</td>
+            <td class="date-cell">{{ c.last_call[:16] }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="muted">No customers logged yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

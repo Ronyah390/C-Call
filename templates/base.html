@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}C-Call{% endblock %}</title>
+  <title>{% block title %}C-Call IVR{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
@@ -13,12 +13,21 @@
   <nav>
     <a class="logo" href="{{ url_for('dashboard') }}">
       <span class="logo-icon">C</span>
-      <span class="logo-text">C-Call</span>
+      <span class="logo-text">C-Call IVR</span>
     </a>
     <div class="nav-links">
-      <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
-      <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">Settings</a>
-      <a class="nav-pill" href="https://smslayer.fun" target="_blank" rel="noreferrer">SMSLayer</a>
+      <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"
+         href="{{ url_for('dashboard') }}"><i class="ti ti-dashboard"></i> Dashboard</a>
+      <a class="nav-link {% if request.endpoint in ['flows','flow_edit'] %}active{% endif %}"
+         href="{{ url_for('flows') }}"><i class="ti ti-git-branch"></i> Flows</a>
+      <a class="nav-link {% if request.endpoint in ['analytics','contact_detail'] %}active{% endif %}"
+         href="{{ url_for('analytics') }}"><i class="ti ti-chart-bar"></i> Analytics</a>
+      <a class="nav-link {% if request.endpoint == 'ecommerce' %}active{% endif %}"
+         href="{{ url_for('ecommerce') }}"><i class="ti ti-shopping-cart"></i> Ecommerce</a>
+      <a class="nav-link {% if request.endpoint == 'bangla_guide' %}active{% endif %}"
+         href="{{ url_for('bangla_guide') }}"><i class="ti ti-help-circle"></i> Bangla Guide</a>
+      <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}"
+         href="{{ url_for('settings') }}"><i class="ti ti-settings"></i> Settings</a>
     </div>
     <div class="sip-bar">
       <span class="sip-dot {% if not sip_ready|default(true) %}warn{% endif %}"></span>

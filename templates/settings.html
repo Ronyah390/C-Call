@@ -1,144 +1,394 @@
 {% extends "base.html" %}
-{% block title %}Settings - C-Call{% endblock %}
+{% block title %}Settings — C-Call IVR{% endblock %}
 {% block content %}
 <div class="page-header">
-  <div class="page-tag"><i class="ti ti-settings"></i> Local Configuration</div>
-  <h1 class="page-title">Settings</h1>
-  <p class="page-desc">Configure SIP credentials, dial format, and optional CDR provider data. Secrets stay in the local app database under <code>instance/</code>.</p>
+  <div class="page-tag"><i class="ti ti-settings"></i> Configuration</div>
+  <h1 class="page-title">System Settings</h1>
+  <p class="page-desc">Configure SIP credentials, TTS providers, CDR sync, and voice options. All values are stored locally in your SQLite database.</p>
 </div>
 
-<form method="post" class="settings-layout">
-  <aside class="settings-nav">
-    <a class="snav-item active" href="#sip"><i class="ti ti-phone-call"></i> SIP settings</a>
-    <a class="snav-item" href="#cdr"><i class="ti ti-database"></i> CDR provider</a>
-    <hr class="snav-divider">
-    <a class="snav-item" href="#preferences"><i class="ti ti-adjustments-horizontal"></i> Preferences</a>
-  </aside>
-
-  <div class="settings-content">
-    <section class="section-card" id="sip">
-      <div class="sc-header">
-        <div class="sc-icon"><i class="ti ti-server"></i></div>
-        <div>
-          <div class="sc-title">SIP Server</div>
-          <div class="sc-sub">Outbound call routing endpoint</div>
-        </div>
-      </div>
-      <div class="sc-body">
-        <div class="fgrid2">
-          <div class="fg">
-            <label class="fl">SIP domain <span class="fl-hint">IP or hostname</span></label>
-            <input class="fi fi-mono" name="SIP_DOMAIN" value="{{ settings.SIP_DOMAIN }}" placeholder="sip.example.com" required>
-          </div>
-          <div class="fg">
-            <label class="fl">SIP port</label>
-            <input class="fi fi-mono" name="SIP_PORT" value="{{ settings.SIP_PORT or '5060' }}" placeholder="5060" required>
-          </div>
-        </div>
-        <div class="fg">
-          <label class="fl">SIP user</label>
-          <input class="fi fi-mono" name="SIP_USER" value="{{ settings.SIP_USER }}" autocomplete="off" placeholder="username or number" required>
-        </div>
-        <div class="fg">
-          <label class="fl">Dial format</label>
-          <div class="fs-wrap">
-            <select class="fs" name="ASTERISK_DIAL_FORMAT">
-              <option value="local_bd" {% if dial_format == "local_bd" %}selected{% endif %}>017XXXXXXXX</option>
-              <option value="e164" {% if dial_format == "e164" %}selected{% endif %}>+88017XXXXXXXX</option>
-              <option value="e164_noplus" {% if dial_format == "e164_noplus" %}selected{% endif %}>88017XXXXXXXX</option>
-              <option value="raw" {% if dial_format == "raw" %}selected{% endif %}>Use normalized input</option>
-            </select>
-            <i class="ti ti-chevron-down fs-arrow"></i>
-          </div>
-          <div class="field-note"><i class="ti ti-info-circle"></i> Controls how outbound numbers are formatted before dialing.</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section-card">
-      <div class="sc-header">
-        <div class="sc-icon"><i class="ti ti-lock"></i></div>
-        <div>
-          <div class="sc-title">Authentication</div>
-          <div class="sc-sub">SIP password stored locally</div>
-        </div>
-      </div>
-      <div class="sc-body">
-        <div class="fg">
-          <label class="fl">SIP password</label>
-          <input class="fi {% if password_set %}fi-saved{% endif %}" name="SIP_PASSWORD" type="password" autocomplete="new-password" placeholder="{{ 'Saved - leave blank to keep' if password_set else 'Enter SIP password' }}">
-          <div class="field-note ok"><i class="ti ti-lock"></i> Saved locally in instance/.</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section-card" id="cdr">
-      <div class="sc-header">
-        <div class="sc-icon"><i class="ti ti-database-dollar"></i></div>
-        <div>
-          <div class="sc-title">CDR Provider</div>
-          <div class="sc-sub">Optional provider duration, status, and cost data</div>
-        </div>
-      </div>
-      <div class="sc-body">
-        <div class="fg">
-          <label class="fl">CDR mode</label>
-          <div class="fs-wrap">
-            <select class="fs" name="CDR_PROVIDER">
-              <option value="manual" {% if cdr_settings.CDR_PROVIDER == "manual" %}selected{% endif %}>Manual CSV import</option>
-              <option value="amarip" {% if cdr_settings.CDR_PROVIDER == "amarip" %}selected{% endif %}>AmarIP API</option>
-              <option value="none" {% if cdr_settings.CDR_PROVIDER == "none" %}selected{% endif %}>Disabled</option>
-            </select>
-            <i class="ti ti-chevron-down fs-arrow"></i>
-          </div>
-        </div>
-        <div class="fgrid2">
-          <div class="fg">
-            <label class="fl">AmarIP base URL</label>
-            <input class="fi fi-mono" name="AMARIP_BASE_URL" value="{{ cdr_settings.AMARIP_BASE_URL }}" placeholder="https://amarip.net">
-          </div>
-          <div class="fg">
-            <label class="fl">AmarIP username</label>
-            <input class="fi fi-mono" name="AMARIP_USERNAME" value="{{ cdr_settings.AMARIP_USERNAME }}" autocomplete="off">
-          </div>
-        </div>
-        <div class="fg">
-          <label class="fl">AmarIP password</label>
-          <input class="fi {% if amarip_password_set %}fi-saved{% endif %}" name="AMARIP_PASSWORD" type="password" autocomplete="new-password" placeholder="{{ 'Saved - leave blank to keep' if amarip_password_set else 'Enter AmarIP password' }}">
-          <div class="field-note"><i class="ti ti-info-circle"></i> If another provider has different CDR fields, use manual CSV import from the dashboard.</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section-card" id="preferences">
-      <div class="sc-header">
-        <div class="sc-icon"><i class="ti ti-adjustments-horizontal"></i></div>
-        <div>
-          <div class="sc-title">Preferences</div>
-          <div class="sc-sub">Current self-hosted defaults</div>
-        </div>
-      </div>
-      <div class="sc-body">
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="tg-title">Log calls</div>
-            <div class="tg-desc">Call history is saved locally after each successful dispatch.</div>
-          </div>
-          <label class="toggle"><input type="checkbox" checked disabled><span class="toggle-slider"></span></label>
-        </div>
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="tg-title">CDR matching</div>
-            <div class="tg-desc">Imported CDR records are matched to call history by phone number.</div>
-          </div>
-          <label class="toggle"><input type="checkbox" checked disabled><span class="toggle-slider"></span></label>
-        </div>
-      </div>
-      <div class="sc-footer">
-        <span class="save-status"><i class="ti ti-shield-lock"></i> Settings are local to this instance.</span>
-        <button class="save-btn" type="submit"><i class="ti ti-device-floppy"></i> Save settings</button>
-      </div>
-    </section>
+<div class="settings-layout">
+  <!-- Sidebar -->
+  <div class="settings-nav">
+    <button class="snav-item active" type="button" data-section="sip-settings">
+      <i class="ti ti-phone-call"></i> SIP Account
+    </button>
+    <div class="snav-divider"></div>
+    <button class="snav-item" type="button" data-section="tts-settings">
+      <i class="ti ti-microphone"></i> TTS Providers
+    </button>
+    <div class="snav-divider"></div>
+    <button class="snav-item" type="button" data-section="cdr-settings">
+      <i class="ti ti-file-analytics"></i> CDR Provider
+    </button>
   </div>
-</form>
+
+  <!-- Content -->
+  <div class="settings-content">
+    <form method="post" action="{{ url_for('settings') }}" class="stack">
+
+      <!-- ── SIP Card ──────────────────────────────────────────── -->
+      <section class="card sc-card" id="sip-settings">
+        <div class="sc-header">
+          <div class="sc-icon"><i class="ti ti-lock-cog"></i></div>
+          <div>
+            <div class="sc-title">SIP Credentials</div>
+            <div class="sc-sub">Outbound trunk (VoIP provider) details</div>
+          </div>
+        </div>
+        <div class="sc-body">
+          <div class="form-row fg">
+            <div class="form-group" style="flex:2;">
+              <label class="form-label">SIP Domain / Server IP</label>
+              <input class="form-input" name="SIP_DOMAIN" value="{{ settings.SIP_DOMAIN or '' }}" placeholder="sip.provider.com" required>
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">SIP Port</label>
+              <input class="form-input" name="SIP_PORT" value="{{ settings.SIP_PORT or '5060' }}" required>
+            </div>
+          </div>
+          <div class="form-row fg">
+            <div class="form-group">
+              <label class="form-label">SIP Username / Line</label>
+              <input class="form-input" name="SIP_USER" value="{{ settings.SIP_USER or '' }}" placeholder="8809612XXXXXXX">
+            </div>
+            <div class="form-group">
+              <label class="form-label">SIP Password</label>
+              <input class="form-input" type="password" name="SIP_PASSWORD"
+                     placeholder="{{ '••••••••  (saved)' if password_set else 'Enter password' }}">
+            </div>
+          </div>
+          <div class="form-group fg">
+            <label class="form-label">Dial Format</label>
+            <select class="form-select" name="ASTERISK_DIAL_FORMAT">
+              <option value="local_bd" {{ 'selected' if dial_format=='local_bd' }}>Local BD (017XXXXXXXX)</option>
+              <option value="e164"     {{ 'selected' if dial_format=='e164' }}>E.164 (+88017XXXXXXXX)</option>
+              <option value="digits"   {{ 'selected' if dial_format=='digits' }}>Digits only (88017XXXXXXXX)</option>
+              <option value="raw"      {{ 'selected' if dial_format=='raw' }}>Raw input (as typed)</option>
+            </select>
+            <div class="field-note"><i class="ti ti-info-circle"></i> If calls fail with SIP 503, try changing this format.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── TTS Card ─────────────────────────────────────────── -->
+      <section class="card sc-card" id="tts-settings" style="display:none;">
+        <div class="sc-header">
+          <div class="sc-icon"><i class="ti ti-microphone"></i></div>
+          <div>
+            <div class="sc-title">TTS Providers</div>
+            <div class="sc-sub">Choose which engine generates voice audio for calls</div>
+          </div>
+        </div>
+        <div class="sc-body">
+
+          <!-- Provider selector -->
+          <div class="form-group fg">
+            <label class="form-label">Active TTS Provider</label>
+            <select class="form-select" name="TTS_PROVIDER" id="tts-provider-select">
+              <option value="gtts"       {{ 'selected' if tts.TTS_PROVIDER=='gtts' }}>gTTS — Google (free, multi-language)</option>
+              <option value="elevenlabs" {{ 'selected' if tts.TTS_PROVIDER=='elevenlabs' }}>ElevenLabs v3 — High-quality AI voices</option>
+              <option value="gemini"     {{ 'selected' if tts.TTS_PROVIDER=='gemini' }}>Google Gemini 2.5 Flash TTS</option>
+            </select>
+          </div>
+
+          <!-- gTTS fields -->
+          <div class="js-gtts-fields tts-pane" style="{{ '' if tts.TTS_PROVIDER=='gtts' else 'display:none;' }}">
+            <div class="form-group fg">
+              <label class="form-label">Default Language Code</label>
+              <input class="form-input" name="TTS_LANG" value="{{ tts.TTS_LANG or 'bn' }}" placeholder="bn / en / hi / ar …">
+              <div class="field-note"><i class="ti ti-info-circle"></i> Uses standard BCP-47 language codes. <code>bn</code> = Bengali, <code>en</code> = English.</div>
+            </div>
+          </div>
+
+          <!-- ElevenLabs fields -->
+          <div class="js-elevenlabs-fields tts-pane" style="{{ '' if tts.TTS_PROVIDER=='elevenlabs' else 'display:none;' }}">
+            <div class="tts-badge"><i class="ti ti-sparkles"></i> ElevenLabs</div>
+            <div class="form-group fg">
+              <label class="form-label">ElevenLabs API Key</label>
+              <div class="voice-picker-row">
+                <input class="form-input" type="password" name="ELEVENLABS_API_KEY" id="el-api-key"
+                       placeholder="{{ '••••••••  (saved — leave blank to keep)' if el_key_set else 'sk_...' }}">
+                <button type="button" class="voice-load-btn" onclick="testElevenLabs()">
+                  <i class="ti ti-plug-connected"></i> Test API
+                </button>
+              </div>
+              <div class="field-note" id="el-test-status">
+                {% if not el_key_set %}<span class="warn-note"><i class="ti ti-alert-triangle"></i> API key required. Get one at elevenlabs.io</span>{% endif %}
+              </div>
+            </div>
+            <div class="form-group fg">
+              <label class="form-label">Model</label>
+              <select class="form-select" name="ELEVENLABS_MODEL" id="el-model">
+                <option value="eleven_v3"              {{ 'selected' if tts.ELEVENLABS_MODEL=='eleven_v3' or not tts.ELEVENLABS_MODEL }}>v3 — Highest quality, expressive (recommended)</option>
+                <option value="eleven_multilingual_v2" {{ 'selected' if tts.ELEVENLABS_MODEL=='eleven_multilingual_v2' }}>Multilingual v2 — Stable, 29 languages</option>
+                <option value="eleven_flash_v2_5"      {{ 'selected' if tts.ELEVENLABS_MODEL=='eleven_flash_v2_5' }}>Flash v2.5 — Ultra-low latency</option>
+                <option value="eleven_turbo_v2_5"      {{ 'selected' if tts.ELEVENLABS_MODEL=='eleven_turbo_v2_5' }}>Turbo v2.5 — Fast, balanced</option>
+              </select>
+              <div class="field-note"><i class="ti ti-info-circle"></i> If a model isn't enabled on your account, Test Voice will show the exact error.</div>
+            </div>
+            <div class="form-group fg">
+              <label class="form-label">Gemini TTS Model</label>
+              <select class="form-select" name="GEMINI_MODEL" id="gm-model">
+                <option value="gemini-2.5-flash-preview-tts" {{ 'selected' if tts.GEMINI_MODEL=='gemini-2.5-flash-preview-tts' or not tts.GEMINI_MODEL }}>Gemini 2.5 Flash TTS Preview (recommended)</option>
+                <option value="gemini-2.5-pro-preview-tts" {{ 'selected' if tts.GEMINI_MODEL=='gemini-2.5-pro-preview-tts' }}>Gemini 2.5 Pro TTS Preview</option>
+                <option value="gemini-3.1-flash-tts-preview" {{ 'selected' if tts.GEMINI_MODEL=='gemini-3.1-flash-tts-preview' }}>Gemini 3.1 Flash TTS Preview</option>
+              </select>
+              <div class="field-note"><i class="ti ti-info-circle"></i> 2.5 Flash is the safest default; 3.1 is newer but may timeout on some projects.</div>
+            </div>
+            <div class="form-group fg">
+              <label class="form-label">Voice</label>
+              <div class="voice-picker-row">
+                <select class="form-select" name="ELEVENLABS_VOICE_ID" id="el-voice-select">
+                  {% if tts.ELEVENLABS_VOICE_ID %}
+                  <option value="{{ tts.ELEVENLABS_VOICE_ID }}" selected>{{ tts.ELEVENLABS_VOICE_ID }} (current)</option>
+                  {% else %}
+                  <option value="">— Load voices first —</option>
+                  {% endif %}
+                </select>
+                <button type="button" class="voice-load-btn" id="el-load-btn" onclick="loadElevenLabsVoices()">
+                  <i class="ti ti-refresh"></i> Fetch Voices
+                </button>
+                <button type="button" class="voice-load-btn" onclick="previewVoice('elevenlabs')">
+                  <i class="ti ti-player-play"></i> Test Voice
+                </button>
+              </div>
+              <div class="field-note" id="el-voice-status"></div>
+              <audio id="el-preview" controls style="margin-top:10px; width:100%; display:none;"></audio>
+            </div>
+          </div>
+
+          <!-- Gemini fields -->
+          <div class="js-gemini-fields tts-pane" style="{{ '' if tts.TTS_PROVIDER=='gemini' else 'display:none;' }}">
+            <div class="tts-badge gemini"><i class="ti ti-sparkles"></i> Gemini 2.5 Flash TTS</div>
+            <div class="form-group fg">
+              <label class="form-label">Google Gemini API Key</label>
+              <div class="voice-picker-row">
+                <input class="form-input" type="password" name="GEMINI_API_KEY" id="gm-api-key"
+                       placeholder="{{ '••••••••  (saved — leave blank to keep)' if gemini_key_set else 'AIza…' }}">
+                <button type="button" class="voice-load-btn" onclick="testGemini()">
+                  <i class="ti ti-plug-connected"></i> Test API
+                </button>
+              </div>
+              <div class="field-note" id="gm-test-status">
+                {% if not gemini_key_set %}<span class="warn-note"><i class="ti ti-alert-triangle"></i> Get a key at aistudio.google.com</span>{% endif %}
+              </div>
+            </div>
+            <div class="form-group fg">
+              <label class="form-label">Voice</label>
+              <div class="voice-picker-row">
+                <select class="form-select" name="GEMINI_VOICE_NAME" id="gm-voice-select">
+                  {% for v in gemini_voices %}
+                  <option value="{{ v }}" {{ 'selected' if tts.GEMINI_VOICE_NAME==v }}>{{ v }}</option>
+                  {% endfor %}
+                </select>
+                <button type="button" class="voice-load-btn" onclick="previewVoice('gemini')">
+                  <i class="ti ti-player-play"></i> Test Voice
+                </button>
+              </div>
+              <div class="field-note" id="gm-voice-status"><i class="ti ti-info-circle"></i> Puck and Aoede are recommended.</div>
+              <audio id="gm-preview" controls style="margin-top:10px; width:100%; display:none;"></audio>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ── CDR Card ─────────────────────────────────────────── -->
+      <section class="card sc-card" id="cdr-settings" style="display:none;">
+        <div class="sc-header">
+          <div class="sc-icon"><i class="ti ti-network"></i></div>
+          <div>
+            <div class="sc-title">CDR Settings</div>
+            <div class="sc-sub">Match call duration and cost from your SIP provider logs</div>
+          </div>
+        </div>
+        <div class="sc-body">
+          <div class="form-group fg">
+            <label class="form-label">CDR Sync Mode</label>
+            <select class="form-select" id="cdr-provider-select" name="CDR_PROVIDER">
+              <option value="manual" {{ 'selected' if cdr_settings.CDR_PROVIDER=='manual' }}>Manual CSV Uploads</option>
+              <option value="amarip" {{ 'selected' if cdr_settings.CDR_PROVIDER=='amarip' }}>AmarIP API Sync</option>
+            </select>
+          </div>
+          <div class="js-amarip-fields" style="{{ '' if cdr_settings.CDR_PROVIDER=='amarip' else 'display:none;' }}">
+            <div class="form-group fg">
+              <label class="form-label">AmarIP Base URL</label>
+              <input class="form-input" name="AMARIP_BASE_URL" value="{{ cdr_settings.AMARIP_BASE_URL or 'https://amarip.net' }}">
+            </div>
+            <div class="form-row fg">
+              <div class="form-group">
+                <label class="form-label">Username</label>
+                <input class="form-input" name="AMARIP_USERNAME" value="{{ cdr_settings.AMARIP_USERNAME or '' }}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Password</label>
+                <input class="form-input" type="password" name="AMARIP_PASSWORD"
+                       placeholder="{{ '••••••••' if amarip_password_set else 'No password saved' }}">
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="sc-footer">
+        <div class="save-status">
+          <span class="sip-dot {% if not sip_ready %}warn{% endif %}"></span>
+          <span>SIP: {{ "Ready" if sip_ready else "Setup required" }}</span>
+        </div>
+        <button class="save-btn" type="submit"><i class="ti ti-device-floppy"></i> Save All Settings</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// Sidebar tab switching
+document.querySelectorAll('.snav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.snav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const target = btn.getAttribute('data-section');
+    document.querySelectorAll('.sc-card').forEach(card => {
+      card.style.display = card.id === target ? 'block' : 'none';
+    });
+  });
+});
+
+// TTS provider pane switching
+const ttsSelect = document.getElementById('tts-provider-select');
+function updateTtsPanes() {
+  const val = ttsSelect.value;
+  document.querySelectorAll('.tts-pane').forEach(p => p.style.display = 'none');
+  const map = {gtts: '.js-gtts-fields', elevenlabs: '.js-elevenlabs-fields', gemini: '.js-gemini-fields'};
+  const el = document.querySelector(map[val]);
+  if (el) el.style.display = 'block';
+}
+ttsSelect.addEventListener('change', updateTtsPanes);
+
+// CDR provider toggle
+const cdrSelect = document.getElementById('cdr-provider-select');
+cdrSelect.addEventListener('change', e => {
+  document.querySelector('.js-amarip-fields').style.display = e.target.value === 'amarip' ? 'block' : 'none';
+});
+
+// Read the currently typed key (so it can be tested before saving)
+function elKey() { return (document.getElementById('el-api-key') || {}).value || ''; }
+function gmKey() { return (document.getElementById('gm-api-key') || {}).value || ''; }
+
+function setStatus(el, kind, html) {
+  el.className = 'field-note ' + (kind === 'ok' ? 'success-note' : kind === 'warn' ? 'warn-note' : '');
+  el.innerHTML = html;
+}
+
+// ElevenLabs voice loader (uses typed key if present, else saved key)
+async function loadElevenLabsVoices() {
+  const btn = document.getElementById('el-load-btn');
+  const status = document.getElementById('el-voice-status');
+  const sel = document.getElementById('el-voice-select');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader spin"></i> Loading…';
+  setStatus(status, '', '');
+  try {
+    const res = await fetch('/api/voices/elevenlabs', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({api_key: elKey()})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    sel.innerHTML = '';
+    (data.voices || []).forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.voice_id;
+      opt.textContent = `${v.name}${v.category ? '  ·  ' + v.category : ''}`;
+      if (v.voice_id === '{{ tts.ELEVENLABS_VOICE_ID }}') opt.selected = true;
+      sel.appendChild(opt);
+    });
+    setStatus(status, 'ok', `<i class="ti ti-check"></i> Loaded ${data.voices.length} voices`);
+  } catch (err) {
+    setStatus(status, 'warn', '⚠ ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-refresh"></i> Fetch Voices';
+  }
+}
+
+// Test ElevenLabs API key
+async function testElevenLabs() {
+  const status = document.getElementById('el-test-status');
+  setStatus(status, '', '<i class="ti ti-loader spin"></i> Testing connection…');
+  try {
+    const res = await fetch('/api/test/elevenlabs', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({api_key: elKey()})
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Failed');
+    setStatus(status, 'ok', `<i class="ti ti-circle-check"></i> ${data.message}`);
+    loadElevenLabsVoices();  // auto-populate voices on success
+  } catch (err) {
+    setStatus(status, 'warn', '⚠ ' + err.message);
+  }
+}
+
+// Test Gemini API key
+async function testGemini() {
+  const status = document.getElementById('gm-test-status');
+  setStatus(status, '', '<i class="ti ti-loader spin"></i> Testing connection (generates a sample)…');
+  try {
+    const res = await fetch('/api/test/gemini', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        api_key: gmKey(),
+        voice_name: document.getElementById('gm-voice-select').value,
+        model: document.getElementById('gm-model').value
+      })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Failed');
+    setStatus(status, 'ok', `<i class="ti ti-circle-check"></i> ${data.message}`);
+  } catch (err) {
+    setStatus(status, 'warn', '⚠ ' + err.message);
+  }
+}
+
+// Generate + play a short voice sample
+async function previewVoice(provider) {
+  const isEl = provider === 'elevenlabs';
+  const status = document.getElementById(isEl ? 'el-voice-status' : 'gm-voice-status');
+  const audio = document.getElementById(isEl ? 'el-preview' : 'gm-preview');
+  setStatus(status, '', '<i class="ti ti-loader spin"></i> Generating sample…');
+  const payload = {provider: provider};
+  if (isEl) {
+    payload.api_key = elKey();
+    payload.voice_id = document.getElementById('el-voice-select').value;
+    payload.model = document.getElementById('el-model').value;
+  } else {
+    payload.api_key = gmKey();
+    payload.voice_name = document.getElementById('gm-voice-select').value;
+    payload.model = document.getElementById('gm-model').value;
+  }
+  try {
+    const res = await fetch('/api/tts/preview', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed');
+    }
+    const blob = await res.blob();
+    audio.src = URL.createObjectURL(blob);
+    audio.style.display = 'block';
+    audio.play();
+    setStatus(status, 'ok', '<i class="ti ti-check"></i> Sample ready — playing.');
+  } catch (err) {
+    setStatus(status, 'warn', '⚠ ' + err.message);
+  }
+}
+</script>
 {% endblock %}

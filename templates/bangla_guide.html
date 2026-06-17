@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}বাংলা গাইড - C-Call IVR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-tag"><i class="ti ti-help-circle"></i> বাংলা ব্যবহার নির্দেশিকা</div>
+  <h1 class="page-title">C-Call IVR ব্যবহার গাইড</h1>
+  <p class="page-desc">প্রথমবার ব্যবহারকারীর জন্য সহজ ভাষায় সেটআপ, কল পাঠানো, IVR ফ্লো বানানো, ভয়েস টেস্ট, ই-কমার্স ইন্টিগ্রেশন এবং সমস্যার সমাধান।</p>
+</div>
+
+<section class="card" style="line-height:1.8;">
+  <div class="card-header">
+    <div class="card-title">১. এই প্ল্যাটফর্ম কী করে?</div>
+  </div>
+  <p style="color:var(--text2);">
+    C-Call IVR দিয়ে আপনি নিজের SIP/VoIP অ্যাকাউন্ট ব্যবহার করে অটোমেটেড ভয়েস কল পাঠাতে পারবেন।
+    দুই ধরনের কাজ করা যায়: একমুখী ভয়েস ব্রডকাস্ট এবং ইন্টারঅ্যাকটিভ IVR মেনু।
+  </p>
+  <div class="columns" style="margin-top:1rem;">
+    <div class="integration-card">
+      <div class="int-title">Direct Voice Call</div>
+      <div class="int-desc">একটি লেখা TTS দিয়ে ভয়েস বানিয়ে বা অডিও ফাইল আপলোড করে এক বা একাধিক নম্বরে কল পাঠানো।</div>
+    </div>
+    <div class="integration-card">
+      <div class="int-title">Interactive IVR</div>
+      <div class="int-desc">কল ধরার পর গ্রাহক ১, ২, ৩ বা ০ চাপলে আলাদা মেনু, বার্তা বা প্রতিনিধির কাছে ট্রান্সফার।</div>
+    </div>
+  </div>
+</section>
+
+<section class="card" style="line-height:1.8; margin-top:1.5rem;">
+  <div class="card-header">
+    <div class="card-title">২. প্রথমবার সেটআপ</div>
+  </div>
+  <ol style="padding-left:1.2rem; color:var(--text2);">
+    <li><strong>Settings</strong> পেজে যান।</li>
+    <li><strong>SIP Account</strong> অংশে আপনার SIP Domain, Port, Username এবং Password দিন। সাধারণত Port হয় <code>5060</code>।</li>
+    <li><strong>Dial Format</strong> ঠিক করুন। বাংলাদেশি নম্বরের জন্য আগে <code>Local BD</code> চেষ্টা করুন। কল না গেলে <code>E.164</code> বা <code>Digits only</code> চেষ্টা করুন।</li>
+    <li><strong>TTS Providers</strong> অংশে gTTS, ElevenLabs বা Gemini নির্বাচন করুন।</li>
+    <li>ElevenLabs/Gemini ব্যবহার করলে API key দিন, তারপর <strong>Test API</strong>, <strong>Fetch Voices</strong> এবং <strong>Test Voice</strong> দিয়ে যাচাই করুন।</li>
+    <li>সবশেষে <strong>Save All Settings</strong> চাপুন।</li>
+  </ol>
+  <div class="banner warn" style="margin-top:1rem; margin-bottom:0;">
+    <i class="ti ti-alert-triangle"></i>
+    কলের অডিও যদি Settings পেজে পরিষ্কার শোনায় কিন্তু ফোন কলে মাঝে মাঝে ভাঙা শোনায়, তাহলে সাধারণত সেটি SIP/RTP নেটওয়ার্ক বা provider route issue।
+  </div>
+</section>
+
+<section class="card" style="line-height:1.8; margin-top:1.5rem;">
+  <div class="card-header">
+    <div class="card-title">৩. Bangla Solar Panel Demo IVR ব্যবহার</div>
+  </div>
+  <p style="color:var(--text2);">
+    <strong>Flows</strong> পেজে গিয়ে <strong>Add Bangla Solar Panel Demo IVR</strong> চাপলে একটি প্রস্তুত ডেমো ফ্লো তৈরি হবে।
+    এটি সোলার প্যানেল ব্যবসার জন্য বানানো, কিন্তু আপনি পরে প্রতিটি অংশ নিজের ব্যবসার মতো করে এডিট করতে পারবেন।
+  </p>
+  <div class="table-wrap" style="margin-top:1rem;">
+    <table class="history-table data">
+      <thead>
+        <tr>
+          <th>কিপ্যাড</th>
+          <th>ডেমো মেনু</th>
+          <th>কাজ</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">1</td><td>নতুন কোটেশন</td><td>বাসা, ব্যবসা, সেচ পাম্প কোটেশন অপশন।</td></tr>
+        <tr><td class="mono">2</td><td>প্যাকেজ তথ্য</td><td>১ কিলোওয়াট, ৩ কিলোওয়াট, ব্যাটারি ব্যাকআপ।</td></tr>
+        <tr><td class="mono">3</td><td>সার্ভিস সাপোর্ট</td><td>ইনভার্টার, ব্যাটারি, প্যানেল মেইনটেন্যান্স।</td></tr>
+        <tr><td class="mono">4</td><td>EMI ও পেমেন্ট</td><td>কিস্তি এবং পেমেন্ট তথ্যের বার্তা।</td></tr>
+        <tr><td class="mono">0</td><td>প্রতিনিধি</td><td>মানুষের কাছে কল ট্রান্সফার করার জন্য।</td></tr>
+        <tr><td class="mono">9</td><td>মূল মেনু</td><td>সাব-মেনু থেকে আবার শুরুতে ফিরে যায়।</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" style="line-height:1.8; margin-top:1.5rem;">
+  <div class="card-header">
+    <div class="card-title">৪. নিজের IVR Flow বানানো বা এডিট করা</div>
+  </div>
+  <ol style="padding-left:1.2rem; color:var(--text2);">
+    <li><strong>Flows</strong> পেজে নতুন Flow তৈরি করুন অথবা ডেমো Flow থেকে <strong>Edit Flow</strong> চাপুন।</li>
+    <li><strong>Add Menu Node</strong> থেকে নতুন node যোগ করুন। Node হলো কলের একটি ধাপ।</li>
+    <li><strong>Menu</strong> node গ্রাহকের keypad input নেয়। যেমন: “সেলসের জন্য ১ চাপুন।”</li>
+    <li><strong>Message</strong> node শুধু বার্তা শুনিয়ে কল শেষ করে।</li>
+    <li><strong>Transfer</strong> node কলকে অন্য নম্বরে পাঠায়। Transfer number ঠিক করে দিন।</li>
+    <li><strong>Connect Keypresses</strong> দিয়ে কোন key চাপলে কোন node-এ যাবে তা map করুন।</li>
+    <li><strong>Entry Point</strong> থেকে কোন node দিয়ে কল শুরু হবে তা সেট করুন।</li>
+  </ol>
+  <p style="color:var(--text2); margin-top:.8rem;">
+    Flow পুরোপুরি মুছতে চাইলে Flows list বা Edit Flow পেজ থেকে <strong>Delete Flow</strong> ব্যবহার করুন।
+  </p>
+</section>
+
+<section class="card" style="line-height:1.8; margin-top:1.5rem;">
+  <div class="card-header">
+    <div class="card-title">৫. কল পাঠানোর নিয়ম</div>
+  </div>
+  <div class="columns">
+    <div>
+      <h3 style="font-size:15px; color:var(--text); margin-bottom:.5rem;">Single Call</h3>
+      <ol style="padding-left:1.2rem; color:var(--text2);">
+        <li>Dashboard-এ Phone Number দিন।</li>
+        <li>Call Mode হিসেবে IVR Flow বা One-way Audio Message বেছে নিন।</li>
+        <li>IVR হলে Flow নির্বাচন করুন। Direct হলে TTS message লিখুন বা audio upload করুন।</li>
+        <li><strong>Launch Call</strong> চাপুন।</li>
+      </ol>
+    </div>
+    <div>
+      <h3 style="font-size:15px; color:var(--text); margin-bottom:.5rem;">Bulk Call</h3>
+      <ol style="padding-left:1.2rem; color:var(--text2);">
+        <li>প্রতি লাইনে একটি নম্বর লিখুন অথবা CSV upload করুন।</li>
+        <li>IVR বা Direct mode নির্বাচন করুন।</li>
+        <li>Message/Flow ঠিক করে <strong>Launch Bulk Call</strong> চাপুন।</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="card" style="line-height:1.8; margin-top:1.5rem;">
+  <div class="card-header">
+    <div class="card-title">৬. Ecommerce Order Call</div>
+  </div>
+  <p style="color:var(--text2);">
+    Ecommerce পেজ থেকে API key পাবেন। WooCommerce, Shopify, n8n, Zapier বা নিজের backend থেকে order তৈরি হলে
+    <code>/api/v1/order-call</code> endpoint-এ POST request পাঠিয়ে গ্রাহককে অটো কল করা যায়।
+  </p>
+  <p style="color:var(--text2); margin-top:.7rem;">
+    আগে <strong>Test Order Call</strong> ফর্ম দিয়ে নিজের নম্বরে একটি টেস্ট কল পাঠিয়ে নিশ্চিত হন।
+  </p>
+</section>
+
+<section class="card" style="line-height:1.8; margin-top:1.5rem;">
+  <div class="card-header">
+    <div class="card-title">৭. সাধারণ সমস্যা ও সমাধান</div>
+  </div>
+  <div class="table-wrap">
+    <table class="history-table data">
+      <thead>
+        <tr>
+          <th>সমস্যা</th>
+          <th>সমাধান</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>SIP Ready দেখাচ্ছে না</td>
+          <td>Settings-এ SIP Domain, User, Password ঠিক আছে কিনা দেখুন। Password blank রাখলে পুরনো password থাকবে।</td>
+        </tr>
+        <tr>
+          <td>কল যাচ্ছে না বা 503 আসছে</td>
+          <td>Dial Format বদলে দেখুন। Local BD, E.164, Digits only আলাদা provider-এ আলাদা কাজ করতে পারে।</td>
+        </tr>
+        <tr>
+          <td>TTS কাজ করছে না</td>
+          <td>Settings থেকে Test API এবং Test Voice চালান। ElevenLabs হলে আগে Fetch Voices করুন। Gemini হলে 2.5 Flash model ব্যবহার করুন।</td>
+        </tr>
+        <tr>
+          <td>অডিও কলে ভাঙা শোনায়</td>
+          <td>Settings preview পরিষ্কার হলে সমস্যা সাধারণত network jitter, SIP provider route, CGNAT, Wi-Fi বা UDP packet loss।</td>
+        </tr>
+        <tr>
+          <td>রেকর্ডিং বা audio conversion fail</td>
+          <td>FFmpeg install আছে কিনা এবং <code>FFMPEG_PATH</code> ঠিক আছে কিনা দেখুন।</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
